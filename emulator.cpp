@@ -56,7 +56,7 @@ Emulator::Emulator(char *rom_path) {
   unsigned long fsize = ftell(rom_fp); 
   rewind(rom_fp);
   if (fsize > sizeof(cartridge_memory)) {
-    cout << "given rom is too large" << endl;
+    cout << "rom is too large" << endl;
     fclose(rom_fp);
     rom_fp = NULL;
     exit(1);
@@ -78,12 +78,32 @@ Emulator::Emulator(char *rom_path) {
     rom_banking_type = NONE;
   }
 
+  curr_rom_bank = 1; // rom bank at 0x4000-0x7fff (default is 1)
+  memset(ram_banks, 0, sizeof(ram_banks));
+  curr_ram_bank = 0;
+
   fclose(rom_fp);
   rom_fp = NULL;
 }
 
 Emulator::~Emulator() {
 
+}
+
+unsigned char Emulator::ReadMemory(unsigned short address) const {
+  // reading from ROM bank
+  if (address >= 0x4000 && address <= 0x7FFF) {
+    unsigned short offset = address - 0x4000;
+    return mem[offset + (curr_rom_bank * 0x4000)];
+  }
+
+  // reading from RAM bank
+  else if (address >= 0xA000 && address <= 0xBFFF) {
+    unsigned short offset = address - 0xA000;
+    return ram_banks[offset + (curr_ram_bank * 0x2000)];
+  }
+  
+  return mem[address];
 }
 
 void Emulator::WriteMemory(unsigned short address, unsigned char data) {

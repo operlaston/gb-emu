@@ -20,6 +20,10 @@ enum banking_types {
 class Emulator { 
   unsigned char mem[0x10000];
   unsigned char cartridge_memory[0x200000];
+  enum banking_types rom_banking_type;
+  unsigned char curr_rom_bank;
+  unsigned char ram_banks[0x8000]; // a ram bank is 0x2000 in size and there are 4 max
+  unsigned char curr_ram_bank;
 
   union register_t{
     unsigned char lo;
@@ -38,14 +42,13 @@ class Emulator {
   unsigned char screen[160][144][3]; // r/g/b for color
 
 
-  enum banking_types rom_banking_type;
 
 public: 
   Emulator(char *rom_path);
   ~Emulator();
   void update();
   void WriteMemory(unsigned short address, unsigned char data);
-  unsigned char ReadMemory(unsigned short address);
+  unsigned char ReadMemory(unsigned short address) const;
 };
 
 #endif
