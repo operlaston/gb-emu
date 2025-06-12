@@ -55,46 +55,92 @@ Emulator::Emulator(char *rom_path) {
   fseek(rom_fp, 0, SEEK_END);
   unsigned long fsize = ftell(rom_fp); 
   rewind(rom_fp);
-  if (fsize > sizeof(cartridge_memory)) {
+  if (fsize > sizeof(rom)) { 
     cout << "rom is too large" << endl;
     fclose(rom_fp);
     rom_fp = NULL;
     exit(1);
   }
-  if (fread(cartridge_memory, 1, fsize, rom_fp) != fsize) {
+  if (fread(rom, 1, fsize, rom_fp) != fsize) { 
     cout << "failed to read rom contents" << endl;
     fclose(rom_fp);
     rom_fp = NULL;
     exit(1);
   }
 
-  if (cartridge_memory[0x147] <= 3 && cartridge_memory[0x147] >= 1) {
+  fclose(rom_fp);
+  rom_fp = NULL;
+
+  if (rom[0x147] <= 3 && rom[0x147] >= 1) { 
     rom_banking_type = MBC1;
   }
-  else if (cartridge_memory[0x147] == 5 || cartridge_memory[0x147] == 6) {
+  else if (rom[0x147] == 5 || rom[0x147] == 6) { 
     rom_banking_type = MBC2;
   }
   else {
     rom_banking_type = NONE;
   }
 
+  num_rom_banks = 2 << rom[0x148];
+  if (rom[0x148] > 6) {
+    cout << "invalid byte at 0x148 for rom size" << endl;
+    exit(1);
+  }
+
+  switch(rom[0x149]) {
+    case 0x0:
+      num_ram_banks = 0;
+      break;
+    case 0x2:
+      num_ram_banks = 1;
+      break;
+    case 0x3:
+      num_ram_banks = 4;
+      break;
+    case 0x4:
+      num_ram_banks = 16;
+      break;
+    case 0x5:
+      num_ram_banks = 8;
+      break;
+    
+  }
+
+  uint8_t checksum = 0;
+  for (uint16_t address = 0x0134; address <= 0x014C; address++) {
+    checksum = checksum - rom[address] - 1;
+  }
+  if (checksum != rom[0x14D]) {
+    cout << "checksum did not pass. stopped during init" << endl;
+    exit(1);
+  }
+
   curr_rom_bank = 1; // rom bank at 0x4000-0x7fff (default is 1)
   memset(ram_banks, 0, sizeof(ram_banks));
   curr_ram_bank = 0;
 
-  fclose(rom_fp);
-  rom_fp = NULL;
+  ram_enabled = false;
+
+  
+  // Instruction instruction_table[256] = {
+  //
+  // };
+  //
+  // // instructions prefixed with cb
+  // Instruction cb_table[256] = {
+  //
+  // };
 }
 
 Emulator::~Emulator() {
 
 }
 
-unsigned char Emulator::ReadMemory(unsigned short address) const {
+unsigned char Emulator::read_byte(unsigned short address) const {
   // reading from ROM bank
   if (address >= 0x4000 && address <= 0x7FFF) {
     unsigned short offset = address - 0x4000;
-    return mem[offset + (curr_rom_bank * 0x4000)];
+    return rom[offset + (curr_rom_bank * 0x4000)];
   }
 
   // reading from RAM bank
@@ -106,9 +152,17 @@ unsigned char Emulator::ReadMemory(unsigned short address) const {
   return mem[address];
 }
 
-void Emulator::WriteMemory(unsigned short address, unsigned char data) {
+// this function assumes little endian
+unsigned short Emulator::read_short(unsigned short address) const {
+  unsigned char lower_byte = read_byte(address);
+  unsigned char upper_byte = read_byte(address + 1);
+  return (upper_byte << 8) | lower_byte;
+}
+
+void Emulator::write_byte(unsigned short address, unsigned char data) {
   // 0x0000-0x7FFF is read only
   if (address < 0x8000) {
+    handle_banking(address, data);
     return;
   }
 
@@ -128,6 +182,48 @@ void Emulator::WriteMemory(unsigned short address, unsigned char data) {
   }
 }
 
+void Emulator::handle_banking(unsigned short address, unsigned char data) {
+  if (rom_banking_type == MBC1) {
+    if (address < 0x2000) {
+      unsigned char lower_bits = data & 0xF;
+      if ( lower_bits == 0xA ) {
+        ram_enabled = true; //enable ram bank writing
+      }
+      else{
+        ram_enabled = false; //disable ram bank writing
+      }
+    } 
+    else if (address < 0x4000) {
+      // TODO: rom bank change
+
+    }
+    else if (address < 0x6000){
+      // TODO: rom or ram bank change
+    }
+    else {
+      // TODO: do something else
+    }
+  }
+  else if (rom_banking_type == MBC2) {
+    if ( address < 0x4000 ) {
+      unsigned char lower_bits = data & 0xF;
+    // The least significant bit of the upper address byte must be zero to enable/disable cart RAM
+      if ((address & 0x10) == 0) { // bit 8 is not set
+        if ( lower_bits == 0xA ) {
+          ram_enabled = true; //enable ram bank writing
+        }
+        else{
+          ram_enabled = false; //disable ram bank writing
+        }
+      }
+      else { // bit 8 is set
+        curr_rom_bank = data & 0xF;
+        curr_rom_bank = curr_rom_bank == 0 ? 1 : curr_rom_bank;
+      }
+    }
+  }
+}
+
 void Emulator::update() {
   // max cycles per frame (60 frames per second)
   const int MAXCYCLES = CYCLES_PER_SECOND / 60;
@@ -140,3 +236,128 @@ void Emulator::update() {
   }
   // render the screen
 }
+
+void Emulator::cycle() {
+  unsigned char opcode = read_byte(pc);
+  pc++;
+  auto& opcode_function = opcode_table[opcode];
+  if (opcode_function) {
+    opcode_function();
+  }
+  else {
+    cout << "unknown opcode detected. exiting now..." << endl;
+    exit(1);
+  }
+}
+
+// it is up to the caller to know whether the register
+// they are looking for is a 1 byte register or a 2 byte register
+unsigned char *Emulator::find_r8(REGISTER reg) {
+  unsigned char *target_register;
+  switch(reg) {
+    case REG_A:
+      target_register = &AF.hi;
+      break;
+    case REG_B:
+      target_register = &BC.hi;
+      break;
+    case REG_C:
+      target_register = &BC.lo;
+      break;
+    case REG_D:
+      target_register = &DE.hi;
+      break;
+    case REG_E:
+      target_register = &DE.lo;
+      break;
+    case REG_F:
+      target_register = &AF.lo;
+      break;
+    case REG_H:
+      target_register = &HL.hi;
+      break;
+    case REG_L:
+      target_register = &HL.lo;
+      break;
+    default:
+      return NULL;
+  }
+  return target_register; 
+}
+
+unsigned short *Emulator::find_r16(REGISTER reg) {
+  unsigned short *target_register;
+  switch(reg) {
+    case REG_AF:
+      target_register = &AF.reg;
+      break;
+    case REG_BC:
+      target_register = &BC.reg;
+      break;
+    case REG_DE:
+      target_register = &DE.reg;
+      break;
+    case REG_HL:
+      target_register = &HL.reg;
+      break;
+    default:
+      return NULL;
+  }
+  return target_register;
+}
+
+void Emulator::ld_r8_r8(REGISTER reg1, REGISTER reg2) {
+  // copy reg2 into reg1
+  unsigned char *reg1_ptr = find_r8(reg1);
+  unsigned char *reg2_ptr = find_r8(reg2);
+  *reg1_ptr = *reg2_ptr;
+}
+
+void Emulator::ld_r8_n8(REGISTER r8) {
+  // copy n8 into r8 
+  unsigned short n8 = read_byte(pc);
+  pc++;
+  unsigned char *reg = find_r8(r8);
+  *reg = n8;
+}
+
+void Emulator::ld_r16_n16(REGISTER r16) {
+  // copy n16 into r16
+  // assumes little endian
+  unsigned short n16 = read_short(pc);
+  pc += 2;
+  unsigned short *reg = find_r16(r16);
+  *reg = n16;
+}
+
+void Emulator::ld_hl_r8(REGISTER r8) {
+  // copy the value in r8 into the byte pointed to by HL
+  unsigned char reg_val = *find_r8(r8); 
+  unsigned short byte_loc = HL.reg;
+  write_byte(byte_loc, reg_val);
+}
+
+void Emulator::ld_hl_n8() {
+  // copy the value in n8 into the byte pointed to by HL
+  unsigned char n8 = read_byte(pc);
+  pc++;
+  unsigned short byte_loc = HL.reg;
+  write_byte(byte_loc, n8);
+}
+
+void Emulator::ld_r8_hl(REGISTER r8) {
+  // copy the value pointed to by HL into r8
+  unsigned short byte_loc = HL.reg;
+  unsigned char byte_val = read_byte(byte_loc);
+  unsigned char *reg = find_r8(r8);
+  *reg = byte_val;
+}
+
+void Emulator::ld_r16_a(REGISTER r16) {
+  // copy the value in register A into the byte pointed to by r16
+  unsigned char reg_a = AF.hi;
+  unsigned short r16_loc = *find_r16(r16);
+  write_byte(r16_loc, reg_a);
+}
+
+
