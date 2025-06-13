@@ -86,7 +86,10 @@ class Emulator {
   unsigned char next8();
   unsigned short next16();
   void set_flag(int, bool);
+  bool get_flag(int);
   void cycle();
+  
+  // load instructions
   void ld_r8_r8(REGISTER, REGISTER);
   void ld_r8_n8(REGISTER);
   void ld_r16_n16(REGISTER);
@@ -95,21 +98,125 @@ class Emulator {
   void ld_r8_hl(REGISTER);
   void ld_r16_a(REGISTER);
   void ld_n16_a();
-  void ldh_n8_a();
+  void ldh_n8_a(); // website labelled this wrong (rgbds website)
   void ldh_c_a();
   void ld_a_r16(REGISTER);
   void ld_a_n16();
-  void ldh_a_n8();
+  void ldh_a_n8(); // website labelled this wrong too
   void ldh_a_c();
   void ld_hli_a();
   void ld_hld_a();
-  void ld_a_hld();
   void ld_a_hli();
+  void ld_a_hld();
+
+  // 8 bit arithmetic instructions
+  void adc_a_r8(REGISTER);
+  void adc_a_hl();
+  void adc_a_n8();
+  void add_a_r8(REGISTER);
+  void add_a_hl();
+  void add_a_n8();
+  void cp_a_r8(REGISTER);
+  void cp_a_hl();
+  void cp_a_n8();
+  void dec_r8(REGISTER);
+  void dec_hl();
+  void inc_r8(REGISTER);
+  void inc_hl();
+  void sbc_a_r8(REGISTER);
+  void sbc_a_hl();
+  void sbc_a_n8();
+  void sub_a_r8(REGISTER);
+  void sub_a_hl();
+  void sub_a_n8();
+
+  // 16 bit arithmetic instructions
+  void add_hl_r16(REGISTER);
+  void dec_r16(REGISTER);
+  void inc_r16(REGISTER);
+
+  // bitwise logic instructions
+  void and_a_r8(REGISTER);
+  void and_a_hl();
+  void and_a_n8();
+  void cpl();
+  void or_a_r8(REGISTER);
+  void or_a_hl();
+  void or_a_n8();
+  void xor_a_r8(REGISTER);
+  void xor_a_hl();
+  void xor_a_n8();
+
+  // bit flag instructions
+  void bit_u3_r8(REGISTER);
+  void bit_u3_hl();
+  void res_u3_r8(REGISTER);
+  void res_u3_hl();
+  void set_u3_r8(REGISTER);
+  void set_u3_hl();
+
+  // bit shift instructions
+  void rl_r8(REGISTER);
+  void rl_hl();
+  void rla();
+  void rlc_r8(REGISTER);
+  void rlc_hl();
+  void rlca();
+  void rr_r8(REGISTER);
+  void rr_hl();
+  void rra();
+  void rrc_r8(REGISTER);
+  void rrc_hl();
+  void rrca();
+  void sla_r8(REGISTER);
+  void sla_hl();
+  void sra_r8(REGISTER);
+  void sra_hl();
+  void srl_r8(REGISTER);
+  void srl_hl();
+  void swap_r8(REGISTER);
+  void swap_hl();
+
+  // jumps and subroutine instructions 
+  void call_n16();
+  void call_cc_n16();
+  void jp_hl();
+  void jp_n16();
+  void jp_cc_n16();
+  void jr_n16();
+  void jr_cc_n16();
+  void ret_cc();
+  void ret();
+  void reti();
+  void rst_vec();
+
+  // carry flag instructions
+  void ccf();
+  void scf();
+
+  // stack manipulation instructions
+  void add_hl_sp();
+  void add_sp_e8();
+  void dec_sp();
+  void inc_sp();
   void ld_sp_n16();
   void ld_n16_sp();
   void ld_hl_sp_e8();
   void ld_sp_hl();
+  void pop_af();
+  void pop_r16(REGISTER);
+  void push_af();
+  void push_r16(REGISTER);
+
+  // interrupt-related instructions
+  void di();
+  void ei();
+  void halt();
+  
+  // misc instructions
+  void daa();
   void nop();
+  void stop();
 
 public: 
   Emulator(char *rom_path);

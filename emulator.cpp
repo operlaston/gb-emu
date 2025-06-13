@@ -259,9 +259,9 @@ unsigned short Emulator::next16() {
   return data;
 }
 
-void Emulator::set_flag(int bit, bool set) {
+void Emulator::set_flag(int flagbit, bool set) {
   // create the bit mask using bit shift
-  unsigned char mask = 1 << bit;
+  unsigned char mask = 1 << flagbit;
   unsigned char *flag_reg = find_r8(REG_F);
   // if we want to disable the bit, flip the mask and use bitwise &
   if (!set) {
@@ -271,6 +271,11 @@ void Emulator::set_flag(int bit, bool set) {
   else {
     *flag_reg = *flag_reg | mask;
   }
+}
+
+bool Emulator::get_flag(int flagbit) { 
+  unsigned char mask = 1 << flagbit;
+  return read_byte_reg(REG_F) & mask;
 }
 
 void Emulator::update() {
@@ -354,6 +359,10 @@ unsigned short *Emulator::find_r16(REGISTER reg) {
   }
   return target_register;
 }
+
+/*
+ * load instructions
+ */
 
 void Emulator::ld_r8_r8(REGISTER reg1, REGISTER reg2) {
   // copy reg2 into reg1
@@ -484,6 +493,30 @@ void Emulator::ld_a_hli() {
   HL.reg--;
 }
 
+
+/*
+ * 8-bit arithmetic instructions
+ */
+
+void Emulator::adc_a_r8(REGISTER r8) {
+  // add the value in r8 plus the carry flag to A
+  uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
+  uint8_t reg = read_byte_reg(r8);
+  uint8_t prev = AF.first;
+  AF.first = AF.first + reg + carry_flag;
+  uint16_t res = AF.first + reg + carry_flag;
+
+  set_flag(FLAG_Z, AF.first == 0);
+  set_flag(FLAG_S, 0);
+  set_flag(FLAG_H, ((prev & 0xF) + (reg & 0xF) + (carry_flag)) > 0xF);
+  set_flag(FLAG_C, res > 0xFF);
+}
+
+
+/*
+ * stack manipulation instructions
+ */
+
 void Emulator::ld_sp_n16() {
   // copy n16 into sp
   sp = next16();
@@ -519,7 +552,13 @@ void Emulator::ld_sp_hl() {
   sp = HL.reg;
 }
 
+
+/*
+* special instructions
+*/
+
 void Emulator::nop() {
   // do nothing
   return;
 }
+
