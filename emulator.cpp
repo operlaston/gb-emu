@@ -1,4 +1,5 @@
 #include "emulator.h"
+#include <pthread.h>
 using namespace std;
 
 Emulator::Emulator(char *rom_path) {
@@ -121,6 +122,8 @@ Emulator::Emulator(char *rom_path) {
 
   ram_enabled = false;
 
+  // opcode table entry example
+  opcode_table[0x2] = [this](){ ld_r16_a(REG_BC); };
   
   // Instruction instruction_table[256] = {
   //
@@ -153,7 +156,7 @@ unsigned char Emulator::read_byte(unsigned short address) const {
 }
 
 // this function assumes little endian
-unsigned short Emulator::read_short(unsigned short address) const {
+unsigned short Emulator::read_word(unsigned short address) const {
   unsigned char lower_byte = read_byte(address);
   unsigned char upper_byte = read_byte(address + 1);
   return (upper_byte << 8) | lower_byte;
@@ -224,6 +227,52 @@ void Emulator::handle_banking(unsigned short address, unsigned char data) {
   }
 }
 
+void Emulator::write_byte_reg(REGISTER r8, unsigned char data) {
+  unsigned char *reg = find_r8(r8);
+  *reg = data;
+}
+
+// void Emulator::write_word_reg(REGISTER r16, unsigned short data) {
+//   unsigned short *reg = find_r16(r16);
+//   *reg = data;
+// }
+
+unsigned char Emulator::read_byte_reg(REGISTER r8) {
+  unsigned char *reg = find_r8(r8);
+  return *reg;
+}
+
+// unsigned short Emulator::read_word_reg(REGISTER r16) {
+//   unsigned short *reg = find_r16(r16);
+//   return *reg;
+// }
+
+unsigned char Emulator::next8() {
+  unsigned char data = read_byte(pc);
+  pc++;
+  return data;
+}
+
+unsigned short Emulator::next16() {
+  unsigned short data = read_word(pc);
+  pc += 2;
+  return data;
+}
+
+void Emulator::set_flag(int bit, bool set) {
+  // create the bit mask using bit shift
+  unsigned char mask = 1 << bit;
+  unsigned char *flag_reg = find_r8(REG_F);
+  // if we want to disable the bit, flip the mask and use bitwise &
+  if (!set) {
+    *flag_reg = *flag_reg & ~mask;
+  }
+  // if we want to set the bit, bitwise |
+  else {
+    *flag_reg = *flag_reg | mask;
+  }
+}
+
 void Emulator::update() {
   // max cycles per frame (60 frames per second)
   const int MAXCYCLES = CYCLES_PER_SECOND / 60;
@@ -256,28 +305,28 @@ unsigned char *Emulator::find_r8(REGISTER reg) {
   unsigned char *target_register;
   switch(reg) {
     case REG_A:
-      target_register = &AF.hi;
+      target_register = &AF.first;
       break;
     case REG_B:
-      target_register = &BC.hi;
+      target_register = &BC.first;
       break;
     case REG_C:
-      target_register = &BC.lo;
+      target_register = &BC.second;
       break;
     case REG_D:
-      target_register = &DE.hi;
+      target_register = &DE.first;
       break;
     case REG_E:
-      target_register = &DE.lo;
+      target_register = &DE.second;
       break;
     case REG_F:
-      target_register = &AF.lo;
+      target_register = &AF.second;
       break;
     case REG_H:
-      target_register = &HL.hi;
+      target_register = &HL.first;
       break;
     case REG_L:
-      target_register = &HL.lo;
+      target_register = &HL.second;
       break;
     default:
       return NULL;
@@ -324,7 +373,7 @@ void Emulator::ld_r8_n8(REGISTER r8) {
 void Emulator::ld_r16_n16(REGISTER r16) {
   // copy n16 into r16
   // assumes little endian
-  unsigned short n16 = read_short(pc);
+  unsigned short n16 = read_word(pc);
   pc += 2;
   unsigned short *reg = find_r16(r16);
   *reg = n16;
@@ -332,9 +381,8 @@ void Emulator::ld_r16_n16(REGISTER r16) {
 
 void Emulator::ld_hl_r8(REGISTER r8) {
   // copy the value in r8 into the byte pointed to by HL
-  unsigned char reg_val = *find_r8(r8); 
   unsigned short byte_loc = HL.reg;
-  write_byte(byte_loc, reg_val);
+  write_byte(byte_loc, read_byte_reg(r8));
 }
 
 void Emulator::ld_hl_n8() {
@@ -355,9 +403,123 @@ void Emulator::ld_r8_hl(REGISTER r8) {
 
 void Emulator::ld_r16_a(REGISTER r16) {
   // copy the value in register A into the byte pointed to by r16
-  unsigned char reg_a = AF.hi;
+  unsigned char reg_a = AF.first;
   unsigned short r16_loc = *find_r16(r16);
   write_byte(r16_loc, reg_a);
 }
 
+void Emulator::ld_n16_a() {
+  // copy the value in register A into the byte at address n16
+  unsigned short loc = read_word(pc);
+  pc += 2;
+  write_byte(loc, AF.first);
+}
 
+void Emulator::ldh_n8_a() {
+  // copy the value in register A into the byte at address n8
+  // provided the address is between 0xFF00 and 0xFFFF
+  unsigned char loc = read_byte(pc);
+  pc += 1;
+  loc = 0xFF00 + loc;
+  write_byte(loc, AF.first);
+}
+
+void Emulator::ldh_c_a() {
+  // copy the value in register A into the byte at address 0xFF00 + C
+  write_byte(0xFF00 + BC.second, AF.first);
+}
+
+void Emulator::ld_a_r16(REGISTER r16) {
+  // copy the byte pointed to by r16 into register A  
+  unsigned short *reg = find_r16(r16);
+  unsigned char val = read_byte(*reg);
+  write_byte_reg(REG_A, val);
+}
+
+void Emulator::ld_a_n16() {
+  unsigned short n16 = next16();
+  write_byte_reg(REG_A, read_byte(n16));
+}
+
+void Emulator::ldh_a_n8() {
+  // load into register A the data from the address specified by 
+  // n8 + 0xFF00
+  unsigned short n8 = next8();
+  write_byte_reg(REG_A, read_byte(0xFF00 + n8));
+}
+
+void Emulator::ldh_a_c() {
+  // copy the byte from address 0xFF00 + C into register A
+  unsigned char val = 0xFF00 + read_byte_reg(REG_C);
+  write_byte_reg(REG_A, val);
+}
+
+void Emulator::ld_hli_a() {
+  // copy the value in register A into the byte pointed to by HL
+  // and increment HL afterwards
+  unsigned char val = read_byte_reg(REG_A);
+  unsigned short loc = HL.reg;
+  write_byte(loc, val);
+  HL.reg++;
+}
+
+void Emulator::ld_hld_a() {
+  // copy A into byte pointed by HL and decrement HL
+  unsigned char val = read_byte_reg(REG_A);
+  unsigned short loc = HL.reg;
+  write_byte(loc, val);
+  HL.reg--;
+}
+
+void Emulator::ld_a_hld() {
+  // copy byte pointed by HL into A and decrement HL after
+  unsigned char val = read_byte(HL.reg);
+  write_byte_reg(REG_A, val);
+  HL.reg--;
+}
+
+void Emulator::ld_a_hli() {
+  // copy byte pointed by HL into A and increment HL after
+  write_byte_reg(REG_A, read_byte(HL.reg));
+  HL.reg--;
+}
+
+void Emulator::ld_sp_n16() {
+  // copy n16 into sp
+  sp = next16();
+}
+
+void Emulator::ld_n16_sp() {
+  // copy sp into n16 and n16 + 1
+  // little endian so write least significant byte first
+  unsigned short n16 = next16();
+  write_byte(n16, sp & 0xFF); 
+  write_byte(n16 + 1, sp >> 8);
+}
+
+void Emulator::ld_hl_sp_e8() {
+  // add e8 to sp and copy result into HL; don't update sp
+  int8_t e8 = next8();
+  HL.reg = e8 + sp;  
+  set_flag(FLAG_Z, 0);
+  set_flag(FLAG_S, 0);
+  if ((e8 & 0xF) + (sp & 0xF) > 0xF) {
+    set_flag(FLAG_H, 1);
+  }
+  else set_flag(FLAG_H, 0);
+  // perform and unsigned addition to determine carry flags
+  if ((e8 & 0xFF) + (sp & 0xFF) > 0xFF) {
+    set_flag(FLAG_C, 1);
+  }
+  else set_flag(FLAG_C, 0);
+}
+
+void Emulator::ld_sp_hl() {
+  // copy HL into sp
+  sp = HL.reg;
+}
+
+void Emulator::nop() {
+  // do nothing
+  return;
+}

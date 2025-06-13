@@ -40,8 +40,8 @@ typedef enum {
 // } Instruction;
 
 union reg_t{
-  unsigned char lo;
-  unsigned char hi;
+  unsigned char second;
+  unsigned char first;
   unsigned short reg;
 };
 
@@ -75,10 +75,17 @@ class Emulator {
 
   void handle_banking(unsigned short address, unsigned char data);
   void write_byte(unsigned short address, unsigned char data);
+  void write_byte_reg(REGISTER, unsigned char);
+  // void write_word_reg(REGISTER, unsigned short);
   unsigned char read_byte(unsigned short address) const;
-  unsigned short read_short(unsigned short address) const;
+  unsigned short read_word(unsigned short address) const;
+  unsigned char read_byte_reg(REGISTER);
+  // unsigned short read_word_reg(REGISTER);
   unsigned char *find_r8(REGISTER);
   unsigned short *find_r16(REGISTER);
+  unsigned char next8();
+  unsigned short next16();
+  void set_flag(int, bool);
   void cycle();
   void ld_r8_r8(REGISTER, REGISTER);
   void ld_r8_n8(REGISTER);
@@ -88,10 +95,11 @@ class Emulator {
   void ld_r8_hl(REGISTER);
   void ld_r16_a(REGISTER);
   void ld_n16_a();
-  void ldh_n16_a();
+  void ldh_n8_a();
   void ldh_c_a();
+  void ld_a_r16(REGISTER);
   void ld_a_n16();
-  void ldh_a_n16();
+  void ldh_a_n8();
   void ldh_a_c();
   void ld_hli_a();
   void ld_hld_a();
