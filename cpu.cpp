@@ -1,4 +1,4 @@
-#include "emulator.h"
+#include "cpu.h"
 #include <cstdint>
 #include <pthread.h>
 using namespace std;
@@ -11,6 +11,7 @@ Emulator::Emulator(char *rom_path) {
   BC.reg = 0x0013;
   DE.reg = 0x00D8;
   HL.reg = 0x014D;
+  ime = 0;
 
   // set special rom registers
   mem[0xFF05] = 0x00;
@@ -156,7 +157,7 @@ unsigned char Emulator::read_byte(unsigned short address) const {
   return mem[address];
 }
 
-// this function assumes little endian
+// gameboy is little endian
 unsigned short Emulator::read_word(unsigned short address) const {
   unsigned char lower_byte = read_byte(address);
   unsigned char upper_byte = read_byte(address + 1);
@@ -292,12 +293,13 @@ void Emulator::update() {
   // render the screen
 }
 
-void Emulator::cycle() {
+void Emulator::fetch_and_execute() {
   unsigned char opcode = read_byte(pc);
   pc++;
   auto& opcode_function = opcode_table[opcode];
   if (opcode_function) {
     opcode_function();
+    // increment number of cycles/ticks based on the instruction
   }
   else {
     cout << "unknown opcode detected. exiting now..." << endl;
@@ -973,13 +975,129 @@ void Emulator::srl_hl() {
   set_shift_flags(val);
 }
 
+void Emulator::swap_r8(REGISTER r8) {
+  uint8_t val = read_r8(r8);
+  uint8_t lower_four = val & 0xF;
+  lower_four <<= 4;
+  val >>= 4;
+  val |= lower_four;
+  write_r8(r8, val);
+  set_flag(FLAG_Z, val == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 0);
+  set_flag(FLAG_C, 0);
+}
+
+void Emulator::swap_hl() {
+  uint8_t val = read_byte(HL.reg);
+  uint8_t lower_four = val & 0xF;
+  lower_four <<= 4;
+  val >>= 4;
+  val |= lower_four;
+  write_byte(HL.reg, val);
+  set_flag(FLAG_Z, val == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 0);
+  set_flag(FLAG_C, 0);
+}
+
+
+/*
+ * jumps and subroutine instructions
+ */
+
+void Emulator::call_n16() {
+  uint16_t n16 = next16();
+  // next16() increments the program counter so it should
+  // be on the next instruction
+
+  // push most significant byte first due to little endian
+  // and stack growing downwards
+  write_byte(--sp, pc >> 8);
+  write_byte(--sp, pc & 0xFF);
+  
+  pc = n16;
+}
+
+void Emulator::call_cc_n16(int flag, bool condition) {
+  if (get_flag(flag) == condition) {
+    call_n16();
+  }
+}
+
+void Emulator::jp_hl() {
+  pc = HL.reg;
+}
+
+void Emulator::jp_n16() {
+  uint16_t address = next16();
+  pc = address;
+}
+
+void Emulator::jp_cc_n16(int flag, bool condition) {
+  if (get_flag(flag) == condition) {
+    jp_n16();
+  }
+}
+
+void Emulator::jr_e8() {
+  int8_t e8 = (int8_t)next8();
+  pc += e8;
+}
+
+void Emulator::jr_cc_e8(int flag, bool condition) {
+  if( get_flag(flag) == condition ) {
+    jr_e8();
+  }
+}
+
+void Emulator::ret() {
+  pc = read_word(sp);
+  sp += 2;
+}
+
+void Emulator::ret_cc(int flag, bool condition) {
+  if (get_flag(flag) == condition) {
+    ret();
+  }
+}
+
+void Emulator::reti() {
+  ret();
+  ime = 1;
+}
+
+void Emulator::rst_vec(uint8_t n) {
+  uint16_t addr = n | 0x0000;
+  // pc is already at the next instruction
+  write_byte(--sp, pc >> 8); // most significant byte
+  write_byte(--sp, pc & 0xFF);
+  pc = addr;
+}
+
+/*
+ * carry flag instructions
+ */
+
+void Emulator::ccf() {
+  set_flag(FLAG_C, !get_flag(FLAG_C));
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 0);
+}
+
+void Emulator::scf() {
+  set_flag(FLAG_C, 1);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 0);
+}
+
 
 /*
  * stack manipulation instructions
  */
 
 void Emulator::ld_sp_n16() {
-  // copy n16 into sp
+  // copy n16 into sp 
   sp = next16();
 }
 

@@ -1,5 +1,5 @@
-#ifndef GAMEBOY_H
-#define GAMEBOY_H
+#ifndef CPU_H
+#define CPU_H
 #include <cinttypes>
 #include <string>
 #include <cstring>
@@ -71,6 +71,7 @@ class Emulator {
   unsigned short pc;
 
   unsigned char screen[160][144][3]; // r/g/b for color
+  uint8_t ime; // ime (interrupt) flag
 
 
   void handle_banking(unsigned short address, unsigned char data);
@@ -87,7 +88,7 @@ class Emulator {
   unsigned short next16();
   void set_flag(int, bool);
   bool get_flag(int);
-  void cycle();
+  void fetch_and_execute();
   
   // load instructions
   void ld_r8_r8(REGISTER, REGISTER);
@@ -179,16 +180,16 @@ class Emulator {
 
   // jumps and subroutine instructions 
   void call_n16();
-  void call_cc_n16();
+  void call_cc_n16(int flag, bool condition);
   void jp_hl();
   void jp_n16();
-  void jp_cc_n16();
-  void jr_n16();
-  void jr_cc_n16();
-  void ret_cc();
+  void jp_cc_n16(int flag, bool condition);
+  void jr_e8();
+  void jr_cc_e8(int flag, bool condition);
   void ret();
+  void ret_cc(int flag, bool condition);
   void reti();
-  void rst_vec();
+  void rst_vec(uint8_t);
 
   // carry flag instructions
   void ccf();
