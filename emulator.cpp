@@ -1,4 +1,5 @@
 #include "emulator.h"
+#include <cstdint>
 #include <pthread.h>
 using namespace std;
 
@@ -124,7 +125,7 @@ Emulator::Emulator(char *rom_path) {
 
   // opcode table entry example
   opcode_table[0x2] = [this](){ ld_r16_a(REG_BC); };
-  
+
   // Instruction instruction_table[256] = {
   //
   // };
@@ -227,25 +228,25 @@ void Emulator::handle_banking(unsigned short address, unsigned char data) {
   }
 }
 
-void Emulator::write_byte_reg(REGISTER r8, unsigned char data) {
+void Emulator::write_r8(REGISTER r8, unsigned char data) {
   unsigned char *reg = find_r8(r8);
   *reg = data;
 }
 
-// void Emulator::write_word_reg(REGISTER r16, unsigned short data) {
-//   unsigned short *reg = find_r16(r16);
-//   *reg = data;
-// }
+void Emulator::write_r16(REGISTER r16, unsigned short data) {
+  unsigned short *reg = find_r16(r16);
+  *reg = data;
+}
 
-unsigned char Emulator::read_byte_reg(REGISTER r8) {
+unsigned char Emulator::read_r8(REGISTER r8) {
   unsigned char *reg = find_r8(r8);
   return *reg;
 }
 
-// unsigned short Emulator::read_word_reg(REGISTER r16) {
-//   unsigned short *reg = find_r16(r16);
-//   return *reg;
-// }
+unsigned short Emulator::read_r16(REGISTER r16) {
+  unsigned short *reg = find_r16(r16);
+  return *reg;
+}
 
 unsigned char Emulator::next8() {
   unsigned char data = read_byte(pc);
@@ -275,7 +276,7 @@ void Emulator::set_flag(int flagbit, bool set) {
 
 bool Emulator::get_flag(int flagbit) { 
   unsigned char mask = 1 << flagbit;
-  return read_byte_reg(REG_F) & mask;
+  return read_r8(REG_F) & mask;
 }
 
 void Emulator::update() {
@@ -391,7 +392,7 @@ void Emulator::ld_r16_n16(REGISTER r16) {
 void Emulator::ld_hl_r8(REGISTER r8) {
   // copy the value in r8 into the byte pointed to by HL
   unsigned short byte_loc = HL.reg;
-  write_byte(byte_loc, read_byte_reg(r8));
+  write_byte(byte_loc, read_r8(r8));
 }
 
 void Emulator::ld_hl_n8() {
@@ -442,31 +443,31 @@ void Emulator::ld_a_r16(REGISTER r16) {
   // copy the byte pointed to by r16 into register A  
   unsigned short *reg = find_r16(r16);
   unsigned char val = read_byte(*reg);
-  write_byte_reg(REG_A, val);
+  write_r8(REG_A, val);
 }
 
 void Emulator::ld_a_n16() {
   unsigned short n16 = next16();
-  write_byte_reg(REG_A, read_byte(n16));
+  write_r8(REG_A, read_byte(n16));
 }
 
 void Emulator::ldh_a_n8() {
   // load into register A the data from the address specified by 
   // n8 + 0xFF00
   unsigned short n8 = next8();
-  write_byte_reg(REG_A, read_byte(0xFF00 + n8));
+  write_r8(REG_A, read_byte(0xFF00 + n8));
 }
 
 void Emulator::ldh_a_c() {
   // copy the byte from address 0xFF00 + C into register A
-  unsigned char val = 0xFF00 + read_byte_reg(REG_C);
-  write_byte_reg(REG_A, val);
+  unsigned char val = 0xFF00 + read_r8(REG_C);
+  write_r8(REG_A, val);
 }
 
 void Emulator::ld_hli_a() {
   // copy the value in register A into the byte pointed to by HL
   // and increment HL afterwards
-  unsigned char val = read_byte_reg(REG_A);
+  unsigned char val = read_r8(REG_A);
   unsigned short loc = HL.reg;
   write_byte(loc, val);
   HL.reg++;
@@ -474,7 +475,7 @@ void Emulator::ld_hli_a() {
 
 void Emulator::ld_hld_a() {
   // copy A into byte pointed by HL and decrement HL
-  unsigned char val = read_byte_reg(REG_A);
+  unsigned char val = read_r8(REG_A);
   unsigned short loc = HL.reg;
   write_byte(loc, val);
   HL.reg--;
@@ -483,13 +484,13 @@ void Emulator::ld_hld_a() {
 void Emulator::ld_a_hld() {
   // copy byte pointed by HL into A and decrement HL after
   unsigned char val = read_byte(HL.reg);
-  write_byte_reg(REG_A, val);
+  write_r8(REG_A, val);
   HL.reg--;
 }
 
 void Emulator::ld_a_hli() {
   // copy byte pointed by HL into A and increment HL after
-  write_byte_reg(REG_A, read_byte(HL.reg));
+  write_r8(REG_A, read_byte(HL.reg));
   HL.reg--;
 }
 
@@ -498,18 +499,478 @@ void Emulator::ld_a_hli() {
  * 8-bit arithmetic instructions
  */
 
-void Emulator::adc_a_r8(REGISTER r8) {
-  // add the value in r8 plus the carry flag to A
+void Emulator::adc_a_helper(uint8_t val) {
   uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
-  uint8_t reg = read_byte_reg(r8);
   uint8_t prev = AF.first;
-  AF.first = AF.first + reg + carry_flag;
-  uint16_t res = AF.first + reg + carry_flag;
+  AF.first = AF.first + val + carry_flag;
+  uint16_t res = prev + val + carry_flag;
 
   set_flag(FLAG_Z, AF.first == 0);
-  set_flag(FLAG_S, 0);
-  set_flag(FLAG_H, ((prev & 0xF) + (reg & 0xF) + (carry_flag)) > 0xF);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, ((prev & 0xF) + (val & 0xF) + (carry_flag & 0xF)) > 0xF);
   set_flag(FLAG_C, res > 0xFF);
+}
+
+void Emulator::adc_a_r8(REGISTER r8) {
+  // add the value in r8 plus the carry flag to A
+  adc_a_helper(read_r8(r8));
+}
+
+void Emulator::adc_a_hl() {
+  adc_a_helper(read_byte(HL.reg));
+}
+
+void Emulator::adc_a_n8() {
+  adc_a_helper(next8());
+}
+
+void Emulator::add_a_helper(uint8_t val) {
+  // helper for the following add instructions
+  uint8_t prev = AF.first;
+  AF.first = AF.first + val;
+  set_flag(FLAG_Z, AF.first == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, (prev & 0xF) + (val & 0xF) > 0xF);
+  set_flag(FLAG_C, prev + val > 0xFF);
+}
+
+void Emulator::add_a_r8(REGISTER r8) {
+  add_a_helper(read_r8(r8));
+}
+
+void Emulator::add_a_hl() {
+  add_a_helper(read_byte(HL.reg));
+}
+
+void Emulator::add_a_n8() {
+  add_a_helper(next8());
+}
+
+void Emulator::cp_a_helper(uint8_t val) {
+  set_flag(FLAG_Z, AF.first == val);
+  set_flag(FLAG_N, 1);
+  set_flag(FLAG_H, (AF.first & 0xF) < (val & 0xF));
+  set_flag(FLAG_C, AF.first < val);
+}
+
+void Emulator::cp_a_r8(REGISTER r8) {
+  cp_a_helper(read_r8(r8));
+}
+
+void Emulator::cp_a_hl() {
+  cp_a_helper(read_byte(HL.reg));
+}
+
+void Emulator::cp_a_n8() {
+  cp_a_helper(next8());
+}
+
+void Emulator::dec_r8(REGISTER r8) {
+  uint8_t *reg = find_r8(r8);
+  uint8_t prev = *reg;
+  *reg = *reg - 1;
+  set_flag(FLAG_Z, *reg == 0);
+  set_flag(FLAG_N, 1);
+  set_flag(FLAG_H, (prev & 0xF) == 0);
+}
+
+void Emulator::dec_hl() {
+  uint8_t prev = read_byte(HL.reg);
+  write_byte(HL.reg, prev - 1);
+  set_flag(FLAG_Z, read_byte(HL.reg) == 0);
+  set_flag(FLAG_N, 1);
+  set_flag(FLAG_H, (prev & 0xF) == 0);
+}
+
+void Emulator::inc_r8(REGISTER r8) {
+  uint8_t *reg = find_r8(r8);
+  uint8_t prev = *reg;
+  *reg = *reg + 1;
+  set_flag(FLAG_Z, *reg == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, (prev & 0xF) == 0xF);
+}
+
+void Emulator::inc_hl() {
+  uint8_t prev = read_byte(HL.reg);
+  write_byte(HL.reg, prev + 1);
+  set_flag(FLAG_Z, read_byte(HL.reg) == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, (prev & 0xF) == 0xF);  
+}
+
+void Emulator::sbc_a_helper(uint8_t val) {
+  uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
+  uint8_t prev = AF.first;
+  AF.first = AF.first - val - carry_flag;
+  set_flag(FLAG_Z, AF.first == 0);
+  set_flag(FLAG_N, 1);
+  set_flag(FLAG_H, (val & 0xF) + (carry_flag & 0xF) > (prev & 0xF));
+  set_flag(FLAG_C, val + carry_flag > prev);
+}
+
+void Emulator::sbc_a_r8(REGISTER r8) {
+  sbc_a_helper(read_r8(r8));
+}
+
+void Emulator::sbc_a_hl() {
+  sbc_a_helper(read_byte(HL.reg));
+}
+
+void Emulator::sbc_a_n8() {
+  sbc_a_helper(next8());
+}
+
+void Emulator::sub_a_helper(uint8_t val) {
+  uint8_t prev = AF.first;
+  AF.first -= val;
+  set_flag(FLAG_Z, AF.first == 0);
+  set_flag(FLAG_N, 1);
+  set_flag(FLAG_H, (prev & 0xF) < (val & 0xF));
+  set_flag(FLAG_C, prev < val);
+}
+
+void Emulator::sub_a_r8(REGISTER r8) {
+  sub_a_helper(read_r8(r8));
+}
+
+void Emulator::sub_a_hl() {
+  sub_a_helper(read_byte(HL.reg));
+}
+
+void Emulator::sub_a_n8() {
+  sub_a_helper(next8());
+}
+
+
+/*
+ * 16-bit arithmetic instructions
+ */
+
+void Emulator::add_hl_r16(REGISTER r16) {
+  uint16_t val = read_r16(r16);
+  uint16_t prev = HL.reg;
+  HL.reg += val;
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, (prev & 0xFFF) + (val & 0xFFF) > 0xFFF);
+  set_flag(FLAG_C, prev + val > 0xFFFF);
+}
+
+void Emulator::dec_r16(REGISTER r16) {
+  uint16_t *reg = find_r16(r16);
+  *reg -= 1;
+}
+
+void Emulator::inc_r16(REGISTER r16) {
+  uint16_t *reg = find_r16(r16);
+  *reg += 1;
+}
+
+
+/*
+ * bitwise logic instructions
+ */
+
+void Emulator::and_a_helper(uint8_t val) {
+  AF.first &= val;
+  set_flag(FLAG_Z, AF.first == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 1);
+  set_flag(FLAG_C, 0);
+}
+
+void Emulator::and_a_r8(REGISTER r8) {
+  and_a_helper(read_r8(r8));
+}
+
+void Emulator::and_a_hl() {
+  and_a_helper(read_byte(HL.reg));
+}
+
+void Emulator::and_a_n8() {
+  and_a_helper(next8());
+}
+
+void Emulator::cpl() {
+  AF.first = ~AF.first;
+  set_flag(FLAG_N, 1);
+  set_flag(FLAG_H, 1);
+}
+
+void Emulator::or_a_helper(uint8_t val) {
+  AF.first |= val;
+  set_flag(FLAG_Z, AF.first == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 0);
+  set_flag(FLAG_C, 0);
+}
+
+void Emulator::or_a_r8(REGISTER r8) {
+  or_a_helper(read_r8(r8));
+}
+
+void Emulator::or_a_hl() {
+  or_a_helper(read_byte(HL.reg));
+}
+
+void Emulator::or_a_n8() {
+  or_a_helper(next8());
+}
+
+void Emulator::xor_a_helper(uint8_t val) {
+  AF.first ^= val;
+  set_flag(FLAG_Z, AF.first == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 0);
+  set_flag(FLAG_C, 0);
+}
+
+void Emulator::xor_a_r8(REGISTER r8) {
+  xor_a_helper(read_r8(r8));
+}
+
+void Emulator::xor_a_hl() {
+  xor_a_helper(read_byte(HL.reg));
+}
+
+void Emulator::xor_a_n8() {
+  xor_a_helper(next8());
+}
+
+
+/*
+ * bit flag instructions
+ */
+
+void Emulator::bit_u3_r8(uint8_t bit, REGISTER r8) {
+  uint8_t mask = 1 << bit;
+  uint8_t reg = read_r8(r8);
+  set_flag(FLAG_Z, (reg & mask) == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 1);
+}
+
+void Emulator::bit_u3_hl(uint8_t bit) {
+  uint8_t mask = 1 << bit;
+  uint8_t val = read_byte(HL.reg);
+  set_flag(FLAG_Z, (val & mask) == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 1);
+}
+
+void Emulator::res_u3_r8(uint8_t bit, REGISTER r8) {
+  uint8_t mask = 1 << bit;
+  mask = ~mask;
+  uint8_t *reg = find_r8(r8);
+  *reg &= mask;
+}
+
+void Emulator::res_u3_hl(uint8_t bit) {
+  uint8_t mask = 1 << bit;
+  mask = ~mask;
+  write_byte(HL.reg, read_byte(HL.reg) & mask);
+}
+
+void Emulator::set_u3_r8(uint8_t bit, REGISTER r8) {
+  uint8_t mask = 1 << bit;
+  uint8_t *reg = find_r8(r8);
+  *reg |= mask;
+}
+
+void Emulator::set_u3_hl(uint8_t bit) {
+  uint8_t mask = 1 << bit;
+  write_byte(HL.reg, read_byte(HL.reg) | mask);
+}
+
+
+/*
+ * bit shift instructions
+ */
+
+void Emulator::set_shift_flags(uint8_t val) {
+  set_flag(FLAG_Z, val == 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, 0);
+}
+
+void Emulator::rl_r8(REGISTER r8) {
+  uint8_t reg = read_r8(r8);
+  uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
+  set_flag(FLAG_C, reg & 0x80); //most significant bit
+  reg <<= 1;
+  reg += carry_flag;
+  write_r8(r8, reg);
+
+  set_shift_flags(reg);
+}
+
+void Emulator::rl_hl() {
+  uint8_t val = read_byte(HL.reg);
+  uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
+  set_flag(FLAG_C, val & 0x80); //most significant bit
+  val <<= 1;
+  val += carry_flag;
+  write_byte(HL.reg, val);
+
+  set_shift_flags(val);
+}
+
+void Emulator::rla() {
+  uint8_t val = AF.first;
+  uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
+  set_flag(FLAG_C, val & 0x80); //most significant bit
+  val <<= 1;
+  val += carry_flag;
+  AF.first = val;
+
+  set_shift_flags(1); // RESET zero flag
+}
+
+void Emulator::rlc_r8(REGISTER r8) {
+  uint8_t reg = read_r8(r8);
+  uint8_t msb = reg & 0x80 ? 1 : 0;
+  set_flag(FLAG_C, msb); //most significant bit
+  reg <<= 1;
+  reg += msb;
+  write_r8(r8, reg);
+
+  set_shift_flags(reg);
+}
+
+void Emulator::rlc_hl() {
+  uint8_t val = read_byte(HL.reg);
+  uint8_t msb = val & 0x80 ? 1 : 0;
+  set_flag(FLAG_C, msb); //most significant bit
+  val <<= 1;
+  val += msb;
+  write_byte(HL.reg, val);
+
+  set_shift_flags(val);
+}
+
+void Emulator::rlca() {
+  uint8_t val = AF.first;
+  uint8_t msb = val & 0x80 ? 1 : 0;
+  set_flag(FLAG_C, msb); //most significant bit
+  val <<= 1;
+  val += msb;
+  AF.first = val;
+
+  set_shift_flags(1); // RESET zero flag
+}
+
+void Emulator::rr_r8(REGISTER r8) {
+  uint8_t reg = read_r8(r8);
+  uint8_t carry_flag = get_flag(FLAG_C) ? 0x80 : 0;
+  set_flag(FLAG_C, reg & 0x1); //least significant bit
+  reg >>= 1;
+  reg |= carry_flag;
+  write_r8(r8, reg);
+
+  set_shift_flags(reg);
+}
+
+void Emulator::rr_hl() {
+  uint8_t val = read_byte(HL.reg);
+  uint8_t carry_flag = get_flag(FLAG_C) ? 0x80 : 0;
+  set_flag(FLAG_C, val & 0x1); //least significant bit
+  val >>= 1;
+  val |= carry_flag;
+  write_byte(HL.reg, val);
+
+  set_shift_flags(val);
+}
+
+void Emulator::rra() {
+  uint8_t val = AF.first;
+  uint8_t carry_flag = get_flag(FLAG_C) ? 0x80 : 0;
+  set_flag(FLAG_C, val & 0x1); //least significant bit
+  val >>= 1;
+  val |= carry_flag;
+  AF.first = val;
+  set_shift_flags(1); // RESET zero flag
+}
+
+void Emulator::rrc_r8(REGISTER r8) {
+  uint8_t val = read_r8(r8);
+  uint8_t lsb = val & 0x1 ? 0x80 : 0;
+  set_flag(FLAG_C, lsb); //least significant bit
+  val >>= 1;
+  val |= lsb;
+  write_r8(r8, val);
+  set_shift_flags(val);
+}
+
+void Emulator::rrc_hl() {
+  uint8_t val = read_byte(HL.reg);
+  uint8_t lsb = val & 0x1 ? 0x80 : 0;
+  set_flag(FLAG_C, lsb); //least significant bit
+  val >>= 1;
+  val |= lsb;
+  write_byte(HL.reg, val);
+  set_shift_flags(val);
+}
+
+void Emulator::rrca() {
+  uint8_t val = AF.first;
+  uint8_t lsb = val & 0x1 ? 0x80 : 0;
+  set_flag(FLAG_C, lsb); //least significant bit
+  val >>= 1;
+  val |= lsb;
+  AF.first = val;
+  set_shift_flags(1); //RESET zero flag
+}
+
+void Emulator::sla_r8(REGISTER r8) {
+  uint8_t val = read_r8(r8);
+  set_flag(FLAG_C, val & 0x80);
+  val <<= 1;
+  write_r8(r8, val);
+  set_shift_flags(val);
+}
+
+void Emulator::sla_hl() {
+  uint8_t val = read_byte(HL.reg);
+  set_flag(FLAG_C, val & 0x80);
+  val <<= 1;
+  write_byte(HL.reg, val);
+  set_shift_flags(val);
+}
+
+void Emulator::sra_r8(REGISTER r8) {
+  uint8_t val = read_r8(r8);
+  set_flag(FLAG_C, val & 0x1);
+  uint8_t mask = val & 0x80; // msb
+  val >>= 1;
+  val |= mask;
+  write_r8(r8, val);
+  set_shift_flags(val);
+}
+
+void Emulator::sra_hl() {
+  uint8_t val = read_byte(HL.reg);
+  set_flag(FLAG_C, val & 0x1);
+  uint8_t mask = val & 0x80; // msb
+  val >>= 1;
+  val |= mask;
+  write_byte(HL.reg, val);
+  set_shift_flags(val);
+}
+
+void Emulator::srl_r8(REGISTER r8) {
+  uint8_t val = read_r8(r8);
+  set_flag(FLAG_C, val & 0x1);
+  val >>= 1;
+  write_r8(r8, val);
+  set_shift_flags(val);
+}
+
+void Emulator::srl_hl() {
+  uint8_t val = read_byte(HL.reg);
+  set_flag(FLAG_C, val & 0x1);
+  val >>= 1;
+  write_byte(HL.reg, val);
+  set_shift_flags(val);
 }
 
 
@@ -535,7 +996,7 @@ void Emulator::ld_hl_sp_e8() {
   int8_t e8 = next8();
   HL.reg = e8 + sp;  
   set_flag(FLAG_Z, 0);
-  set_flag(FLAG_S, 0);
+  set_flag(FLAG_N, 0);
   if ((e8 & 0xF) + (sp & 0xF) > 0xF) {
     set_flag(FLAG_H, 1);
   }

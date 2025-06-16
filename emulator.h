@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #define FLAG_Z (7) // zero flag
-#define FLAG_S (6) // subtract flag
+#define FLAG_N (6) // subtract flag
 #define FLAG_H (5) // half carry flag
 #define FLAG_C (4) // carry flag
 #define CYCLES_PER_SECOND (4194304)
@@ -75,12 +75,12 @@ class Emulator {
 
   void handle_banking(unsigned short address, unsigned char data);
   void write_byte(unsigned short address, unsigned char data);
-  void write_byte_reg(REGISTER, unsigned char);
-  // void write_word_reg(REGISTER, unsigned short);
+  void write_r8(REGISTER, unsigned char);
+  void write_r16(REGISTER, unsigned short);
   unsigned char read_byte(unsigned short address) const;
   unsigned short read_word(unsigned short address) const;
-  unsigned char read_byte_reg(REGISTER);
-  // unsigned short read_word_reg(REGISTER);
+  unsigned char read_r8(REGISTER);
+  unsigned short read_r16(REGISTER);
   unsigned char *find_r8(REGISTER);
   unsigned short *find_r16(REGISTER);
   unsigned char next8();
@@ -148,12 +148,12 @@ class Emulator {
   void xor_a_n8();
 
   // bit flag instructions
-  void bit_u3_r8(REGISTER);
-  void bit_u3_hl();
-  void res_u3_r8(REGISTER);
-  void res_u3_hl();
-  void set_u3_r8(REGISTER);
-  void set_u3_hl();
+  void bit_u3_r8(uint8_t, REGISTER);
+  void bit_u3_hl(uint8_t);
+  void res_u3_r8(uint8_t, REGISTER);
+  void res_u3_hl(uint8_t);
+  void set_u3_r8(uint8_t, REGISTER);
+  void set_u3_hl(uint8_t);
 
   // bit shift instructions
   void rl_r8(REGISTER);
@@ -217,6 +217,17 @@ class Emulator {
   void daa();
   void nop();
   void stop();
+
+  // instruction helpers
+  void adc_a_helper(uint8_t);
+  void add_a_helper(uint8_t);
+  void cp_a_helper(uint8_t);
+  void sbc_a_helper(uint8_t);
+  void sub_a_helper(uint8_t);
+  void and_a_helper(uint8_t);
+  void or_a_helper(uint8_t);
+  void xor_a_helper(uint8_t);
+  void set_shift_flags(uint8_t);
 
 public: 
   Emulator(char *rom_path);
