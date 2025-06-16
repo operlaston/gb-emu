@@ -1096,6 +1096,34 @@ void Emulator::scf() {
  * stack manipulation instructions
  */
 
+void Emulator::add_hl_sp() {
+  uint16_t prev = HL.reg;
+  HL.reg += sp;
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, (prev & 0xFFF) + (sp & 0xFFF) > 0xFFF);
+  set_flag(FLAG_C, prev + sp > 0xFFFF);
+}
+
+void Emulator::add_sp_e8() {
+  int8_t e8 = (int8_t)next8();
+  uint8_t prev = sp & 0xFF;
+  sp += e8;
+  uint8_t u8 = (uint8_t)e8;
+  
+  set_flag(FLAG_Z, 0);
+  set_flag(FLAG_N, 0);
+  set_flag(FLAG_H, (prev & 0xF) + (u8 & 0xF) > 0xF);
+  set_flag(FLAG_C, prev + u8 > 0xFF);
+}
+
+void Emulator::dec_sp() {
+  sp--;
+}
+
+void Emulator::inc_sp() {
+  sp++;
+}
+
 void Emulator::ld_sp_n16() {
   // copy n16 into sp 
   sp = next16();
