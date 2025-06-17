@@ -12,6 +12,7 @@ Emulator::Emulator(char *rom_path) {
   DE.reg = 0x00D8;
   HL.reg = 0x014D;
   ime = 0;
+  set_ime = false;
 
   // set special rom registers
   mem[0xFF05] = 0x00;
@@ -299,6 +300,13 @@ void Emulator::fetch_and_execute() {
   auto& opcode_function = opcode_table[opcode];
   if (opcode_function) {
     opcode_function();
+    if (is_last_instr_ei) {
+      is_last_instr_ei = false;
+    }
+    else if (set_ime) {
+      ime = 1;
+      set_ime = false;
+    }
     // increment number of cycles/ticks based on the instruction
   }
   else {
@@ -1159,13 +1167,79 @@ void Emulator::ld_sp_hl() {
   sp = HL.reg;
 }
 
+void Emulator::pop_af() {
+  AF.second = read_byte(sp++);
+  AF.first = read_byte(sp++);
+}
+
+void Emulator::pop_r16(REGISTER r16) {
+  uint8_t low = read_byte(sp++);
+  uint8_t high = read_byte(sp++);
+  uint16_t val = (high << 8) | low;
+  write_r16(r16, val);
+}
+
+void Emulator::push_af() {
+  write_byte(--sp, AF.first);
+  write_byte(--sp, AF.second);
+}
+
+void Emulator::push_r16(REGISTER r16) {
+  uint16_t val = read_r16(r16);
+  uint8_t high = val & 0xFF00;
+  uint8_t low = val & 0x00FF;
+  write_byte(--sp, high);
+  write_byte(--sp, low);
+}
+
+
+/*
+ * interrupt related instructions
+ */
+
+void Emulator::di() {
+  ime = 0;
+}
+
+void Emulator::ei() {
+  set_ime = true;
+  is_last_instr_ei = true;
+}
+
+void Emulator::halt() {
+  //TODO
+}
+
 
 /*
 * special instructions
 */
+
+void Emulator::daa() {
+  uint8_t adjustment = 0;
+  if (get_flag(FLAG_N)) {
+    if (get_flag(FLAG_H)) adjustment += 0x6;
+    if (get_flag(FLAG_C)) adjustment += 0x60;
+    AF.first -= adjustment;
+  }
+  else {
+    if (get_flag(FLAG_H) || (AF.first & 0xF) > 0x9) adjustment += 0x6;
+    if (get_flag(FLAG_C) || AF.first > 0x99) {
+      adjustment += 0x60;
+      set_flag(FLAG_C, 1);
+    }
+    AF.first += adjustment;
+  }
+
+  set_flag(FLAG_Z, AF.first == 0);
+  set_flag(FLAG_H, 0);
+}
 
 void Emulator::nop() {
   // do nothing
   return;
 }
 
+void Emulator::stop() {
+  //TODO
+}

@@ -71,7 +71,9 @@ class Emulator {
   unsigned short pc;
 
   unsigned char screen[160][144][3]; // r/g/b for color
-  uint8_t ime; // ime (interrupt) flag
+  bool ime; // ime (interrupt) flag
+  bool set_ime; // set by the EI instruction
+  bool is_last_instr_ei;
 
 
   void handle_banking(unsigned short address, unsigned char data);
