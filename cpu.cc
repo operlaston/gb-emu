@@ -1,9 +1,9 @@
-#include "cpu.h"
+#include "cpu.hh"
 #include <cstdint>
 #include <pthread.h>
 using namespace std;
 
-Emulator::Emulator(char *rom_path) {
+Cpu::Cpu(char *rom_path) {
   // initialize program counter, stack pointer, registers
   pc = 0x100;
   sp = 0xFFFE;
@@ -125,8 +125,288 @@ Emulator::Emulator(char *rom_path) {
 
   ram_enabled = false;
 
-  // opcode table entry example
+  // miscellaneous instructions
+  opcode_table[0x0] = [this](){ nop(); };
+  opcode_table[0xCB] = [this](){ };// execute prefixed instruction next //TODO
+  opcode_table[0x10] = [this](){ stop(); };
+  opcode_table[0x27] = [this](){ daa(); };
+
+  // interrupt related instructions
+  opcode_table[0x76] = [this](){ halt(); };
+  opcode_table[0xF3] = [this](){ di(); };
+  opcode_table[0xFB] = [this](){ ei(); };
+
+  // stack manipulation instructions
+  opcode_table[0x31] = [this](){ ld_sp_n16(); };
+  opcode_table[0x33] = [this](){ inc_sp(); };
+  opcode_table[0x8] = [this](){ ld_n16_sp(); };
+  opcode_table[0x39] = [this](){ add_hl_sp(); };
+  opcode_table[0x3B] = [this](){ dec_sp(); };
+  opcode_table[0xC1] = [this](){ pop_r16(REG_BC); };
+  opcode_table[0xD1] = [this](){ pop_r16(REG_DE); };
+  opcode_table[0xE1] = [this](){ pop_r16(REG_HL); };
+  opcode_table[0xF1] = [this](){ pop_r16(REG_AF); };
+  opcode_table[0xC5] = [this](){ push_r16(REG_BC); };
+  opcode_table[0xD5] = [this](){ push_r16(REG_DE); };
+  opcode_table[0xE5] = [this](){ push_r16(REG_HL); };
+  opcode_table[0xF5] = [this](){ push_r16(REG_AF); };
+
+  opcode_table[0xE8] = [this](){ add_sp_e8(); };
+  opcode_table[0xF8] = [this](){ ld_hl_sp_e8(); };
+  opcode_table[0xF9] = [this](){ ld_sp_hl(); };
+
+  // carry flag instructions
+  opcode_table[0x37] = [this](){ scf(); };
+  opcode_table[0x3F] = [this](){ ccf(); };
+
+  // jumps and subroutine instructions
+  opcode_table[0x20] = [this](){ jr_cc_e8(FLAG_Z, false); };
+  opcode_table[0x30] = [this](){ jr_cc_e8(FLAG_C, false); };
+  opcode_table[0x18] = [this](){ jr_e8(); };
+  opcode_table[0x28] = [this](){ jr_cc_e8(FLAG_Z, true); };
+  opcode_table[0x38] = [this](){ jr_cc_e8(FLAG_C, true); };
+  opcode_table[0xC0] = [this](){ ret_cc(FLAG_Z, false); };
+  opcode_table[0xD0] = [this](){ ret_cc(FLAG_C, false); };
+  opcode_table[0xC2] = [this](){ jp_cc_n16(FLAG_Z, false); };
+  opcode_table[0xD2] = [this](){ jp_cc_n16(FLAG_C, false); };
+  opcode_table[0xC3] = [this](){ jp_n16(); };
+  opcode_table[0xC4] = [this](){ call_cc_n16(FLAG_Z, false); };
+  opcode_table[0xD4] = [this](){ call_cc_n16(FLAG_C, false); };
+  opcode_table[0xC7] = [this](){ rst_vec(0x00); };
+  opcode_table[0xD7] = [this](){ rst_vec(0x10); };
+  opcode_table[0xE7] = [this](){ rst_vec(0x20); };
+  opcode_table[0xF7] = [this](){ rst_vec(0x30); };
+  opcode_table[0xC8] = [this](){ ret_cc(FLAG_Z, true); };
+  opcode_table[0xD8] = [this](){ ret_cc(FLAG_C, true); };
+  opcode_table[0xC9] = [this](){ ret(); };
+  opcode_table[0xD9] = [this](){ reti(); };
+  opcode_table[0xE9] = [this](){ jp_hl(); };
+  opcode_table[0xCA] = [this](){ jp_cc_n16(FLAG_Z, true); };
+  opcode_table[0xDA] = [this](){ jp_cc_n16(FLAG_C, true); };
+  opcode_table[0xCC] = [this](){ call_cc_n16(FLAG_Z, true); };
+  opcode_table[0xDC] = [this](){ call_cc_n16(FLAG_Z, true); };
+  opcode_table[0xCD] = [this](){ call_n16(); };
+  opcode_table[0xCF] = [this](){ rst_vec(0x08); };
+  opcode_table[0xDF] = [this](){ rst_vec(0x18); };
+  opcode_table[0xEF] = [this](){ rst_vec(0x28); };
+  opcode_table[0xFF] = [this](){ rst_vec(0x38); };
+ 
+  // bit shift instructions
+  opcode_table[0x7] = [this](){ rlca(); };
+  opcode_table[0x17] = [this](){ rla(); };
+  opcode_table[0xF] = [this](){ rrca(); };
+  opcode_table[0x1F] = [this](){ rra(); };
+
+  // bit flag instructions
+
+  // bitwise logic instructions
+  opcode_table[0x2F] = [this](){ cpl(); };
+
+  // 16 bit arithmetic instructions
+  opcode_table[0x3] = [this](){ inc_r16(REG_BC); };
+  opcode_table[0x13] = [this](){ inc_r16(REG_DE); };
+  opcode_table[0x23] = [this](){ inc_r16(REG_HL); };
+  opcode_table[0x9] = [this](){ add_hl_r16(REG_BC); };
+  opcode_table[0x19] = [this](){ add_hl_r16(REG_DE); };
+  opcode_table[0x29] = [this](){ add_hl_r16(REG_HL); };
+  opcode_table[0xB] = [this](){ dec_r16(REG_BC); };
+  opcode_table[0x1B] = [this](){ dec_r16(REG_DE); };
+  opcode_table[0x2B] = [this](){ dec_r16(REG_HL); };
+  
+  // 8 bit arithmetic instructions
+  opcode_table[0x4] = [this](){ inc_r8(REG_B); };
+  opcode_table[0x14] = [this](){ inc_r8(REG_D); };
+  opcode_table[0x24] = [this](){ inc_r8(REG_H); };
+  opcode_table[0x34] = [this](){ inc_hl(); };  
+  opcode_table[0x5] = [this](){ dec_r8(REG_B); };
+  opcode_table[0x15] = [this](){ dec_r8(REG_D); };
+  opcode_table[0x25] = [this](){ dec_r8(REG_H); };
+  opcode_table[0x35] = [this](){ dec_hl(); };  
+  opcode_table[0xC] = [this](){ inc_r8(REG_C); };  
+  opcode_table[0x1C] = [this](){ inc_r8(REG_E); };  
+  opcode_table[0x2C] = [this](){ inc_r8(REG_L); };  
+  opcode_table[0x3C] = [this](){ inc_r8(REG_A); };  
+  opcode_table[0xD] = [this](){ dec_r8(REG_C); };  
+  opcode_table[0x1D] = [this](){ dec_r8(REG_E); };  
+  opcode_table[0x2D] = [this](){ dec_r8(REG_L); };  
+  opcode_table[0x3D] = [this](){ dec_r8(REG_A); };  
+
+  opcode_table[0x80] = [this](){ add_a_r8(REG_B); };  
+  opcode_table[0x81] = [this](){ add_a_r8(REG_C); };  
+  opcode_table[0x82] = [this](){ add_a_r8(REG_D); };  
+  opcode_table[0x83] = [this](){ add_a_r8(REG_E); };  
+  opcode_table[0x84] = [this](){ add_a_r8(REG_H); };  
+  opcode_table[0x85] = [this](){ add_a_r8(REG_L); };  
+  opcode_table[0x86] = [this](){ add_a_hl(); };  
+  opcode_table[0x87] = [this](){ add_a_r8(REG_A); };  
+
+  opcode_table[0x88] = [this](){ adc_a_r8(REG_B); };  
+  opcode_table[0x89] = [this](){ adc_a_r8(REG_C); };  
+  opcode_table[0x8A] = [this](){ adc_a_r8(REG_D); };  
+  opcode_table[0x8B] = [this](){ adc_a_r8(REG_E); };  
+  opcode_table[0x8C] = [this](){ adc_a_r8(REG_H); };  
+  opcode_table[0x8D] = [this](){ adc_a_r8(REG_L); };  
+  opcode_table[0x8E] = [this](){ adc_a_hl(); };  
+  opcode_table[0x8F] = [this](){ adc_a_r8(REG_A); };  
+
+  opcode_table[0x90] = [this](){ sub_a_r8(REG_B); };  
+  opcode_table[0x91] = [this](){ sub_a_r8(REG_C); };  
+  opcode_table[0x92] = [this](){ sub_a_r8(REG_D); };  
+  opcode_table[0x93] = [this](){ sub_a_r8(REG_E); };  
+  opcode_table[0x94] = [this](){ sub_a_r8(REG_H); };  
+  opcode_table[0x95] = [this](){ sub_a_r8(REG_L); };  
+  opcode_table[0x96] = [this](){ sub_a_hl(); };  
+  opcode_table[0x97] = [this](){ sub_a_r8(REG_A); };  
+
+  opcode_table[0x98] = [this](){ sbc_a_r8(REG_B); };  
+  opcode_table[0x99] = [this](){ sbc_a_r8(REG_C); };  
+  opcode_table[0x9A] = [this](){ sbc_a_r8(REG_D); };  
+  opcode_table[0x9B] = [this](){ sbc_a_r8(REG_E); };  
+  opcode_table[0x9C] = [this](){ sbc_a_r8(REG_H); };  
+  opcode_table[0x9D] = [this](){ sbc_a_r8(REG_L); };  
+  opcode_table[0x9E] = [this](){ sbc_a_hl(); };  
+  opcode_table[0x9F] = [this](){ sbc_a_r8(REG_A); };  
+
+  opcode_table[0xA0] = [this](){ and_a_r8(REG_B); };  
+  opcode_table[0xA1] = [this](){ and_a_r8(REG_C); };  
+  opcode_table[0xA2] = [this](){ and_a_r8(REG_D); };  
+  opcode_table[0xA3] = [this](){ and_a_r8(REG_E); };  
+  opcode_table[0xA4] = [this](){ and_a_r8(REG_H); };  
+  opcode_table[0xA5] = [this](){ and_a_r8(REG_L); };  
+  opcode_table[0xA6] = [this](){ and_a_hl(); };  
+  opcode_table[0xA7] = [this](){ and_a_r8(REG_A); };  
+
+  opcode_table[0xA8] = [this](){ xor_a_r8(REG_B); };  
+  opcode_table[0xA9] = [this](){ xor_a_r8(REG_C); };  
+  opcode_table[0xAA] = [this](){ xor_a_r8(REG_D); };  
+  opcode_table[0xAB] = [this](){ xor_a_r8(REG_E); };  
+  opcode_table[0xAC] = [this](){ xor_a_r8(REG_H); };  
+  opcode_table[0xAD] = [this](){ xor_a_r8(REG_L); };  
+  opcode_table[0xAE] = [this](){ xor_a_hl(); };  
+  opcode_table[0xAF] = [this](){ xor_a_r8(REG_A); };  
+ 
+  opcode_table[0xB0] = [this](){ or_a_r8(REG_B); };  
+  opcode_table[0xB1] = [this](){ or_a_r8(REG_C); };  
+  opcode_table[0xB2] = [this](){ or_a_r8(REG_D); };  
+  opcode_table[0xB3] = [this](){ or_a_r8(REG_E); };  
+  opcode_table[0xB4] = [this](){ or_a_r8(REG_H); };  
+  opcode_table[0xB5] = [this](){ or_a_r8(REG_L); };  
+  opcode_table[0xB6] = [this](){ or_a_hl(); };  
+  opcode_table[0xB7] = [this](){ or_a_r8(REG_A); };  
+
+  opcode_table[0xB8] = [this](){ cp_a_r8(REG_B); };  
+  opcode_table[0xB9] = [this](){ cp_a_r8(REG_C); };  
+  opcode_table[0xBA] = [this](){ cp_a_r8(REG_D); };  
+  opcode_table[0xBB] = [this](){ cp_a_r8(REG_E); };  
+  opcode_table[0xBC] = [this](){ cp_a_r8(REG_H); };  
+  opcode_table[0xBD] = [this](){ cp_a_r8(REG_L); };  
+  opcode_table[0xBE] = [this](){ cp_a_hl(); };  
+  opcode_table[0xBF] = [this](){ cp_a_r8(REG_A); };  
+
+  opcode_table[0xC6] = [this](){ add_a_n8(); };  
+  opcode_table[0xD6] = [this](){ sub_a_n8(); };  
+  opcode_table[0xE6] = [this](){ and_a_n8(); };  
+  opcode_table[0xF6] = [this](){ or_a_n8(); };  
+ 
+  opcode_table[0xCE] = [this](){ adc_a_n8(); };  
+  opcode_table[0xDE] = [this](){ sbc_a_n8(); };  
+  opcode_table[0xEE] = [this](){ xor_a_n8(); };  
+  opcode_table[0xFE] = [this](){ cp_a_n8(); };  
+
+  // load instructions
+  opcode_table[0x1] = [this](){ ld_r16_n16(REG_BC); };
+  opcode_table[0x11] = [this](){ ld_r16_n16(REG_DE); };
+  opcode_table[0x21] = [this](){ ld_r16_n16(REG_HL); };
+
   opcode_table[0x2] = [this](){ ld_r16_a(REG_BC); };
+  opcode_table[0x12] = [this](){ ld_r16_a(REG_DE); };
+  opcode_table[0x22] = [this](){ ld_hli_a(); };
+  opcode_table[0x32] = [this](){ ld_hld_a(); };
+  opcode_table[0x6] = [this](){ ld_r8_n8(REG_B); };
+  opcode_table[0x16] = [this](){ ld_r8_n8(REG_D); };
+  opcode_table[0x26] = [this](){ ld_r8_n8(REG_H); };
+  opcode_table[0x36] = [this](){ ld_hl_n8(); };
+  opcode_table[0x46] = [this](){ ld_r8_hl(REG_B); };
+  opcode_table[0x56] = [this](){ ld_r8_hl(REG_D); };
+  opcode_table[0x66] = [this](){ ld_r8_hl(REG_H); };
+
+  opcode_table[0xA] = [this](){ ld_a_r16(REG_BC); };
+  opcode_table[0x1A] = [this](){ ld_a_r16(REG_DE); };
+  opcode_table[0x2A] = [this](){ ld_a_hli(); };
+  opcode_table[0x3A] = [this](){ ld_a_hld(); };
+  opcode_table[0xE] = [this](){ ld_r8_n8(REG_C); };
+  opcode_table[0x1E] = [this](){ ld_r8_n8(REG_E); };
+  opcode_table[0x2E] = [this](){ ld_r8_n8(REG_L); };
+  opcode_table[0x3E] = [this](){ ld_r8_n8(REG_A); };
+
+  opcode_table[0x40] = [this](){ ld_r8_r8(REG_B, REG_B); };
+  opcode_table[0x50] = [this](){ ld_r8_r8(REG_D, REG_B); };
+  opcode_table[0x60] = [this](){ ld_r8_r8(REG_H, REG_B); };
+  opcode_table[0x70] = [this](){ ld_hl_r8(REG_B); };
+  opcode_table[0x41] = [this](){ ld_r8_r8(REG_B, REG_C); };
+  opcode_table[0x51] = [this](){ ld_r8_r8(REG_D, REG_C); };
+  opcode_table[0x61] = [this](){ ld_r8_r8(REG_H, REG_C); };
+  opcode_table[0x71] = [this](){ ld_hl_r8(REG_C); };
+  opcode_table[0x42] = [this](){ ld_r8_r8(REG_B, REG_D); };
+  opcode_table[0x52] = [this](){ ld_r8_r8(REG_D, REG_D); };
+  opcode_table[0x62] = [this](){ ld_r8_r8(REG_H, REG_D); };
+  opcode_table[0x72] = [this](){ ld_hl_r8(REG_D); };
+  opcode_table[0x43] = [this](){ ld_r8_r8(REG_B, REG_E); };
+  opcode_table[0x53] = [this](){ ld_r8_r8(REG_D, REG_E); };
+  opcode_table[0x63] = [this](){ ld_r8_r8(REG_H, REG_E); };
+  opcode_table[0x73] = [this](){ ld_hl_r8(REG_E); };
+  opcode_table[0x44] = [this](){ ld_r8_r8(REG_B, REG_H); };
+  opcode_table[0x54] = [this](){ ld_r8_r8(REG_D, REG_H); };
+  opcode_table[0x64] = [this](){ ld_r8_r8(REG_H, REG_H); };
+  opcode_table[0x74] = [this](){ ld_hl_r8(REG_H); };
+  opcode_table[0x45] = [this](){ ld_r8_r8(REG_B, REG_L); };
+  opcode_table[0x55] = [this](){ ld_r8_r8(REG_D, REG_L); };
+  opcode_table[0x65] = [this](){ ld_r8_r8(REG_H, REG_L); };
+  opcode_table[0x75] = [this](){ ld_hl_r8(REG_L); };
+  opcode_table[0x47] = [this](){ ld_r8_r8(REG_B, REG_A); };
+  opcode_table[0x57] = [this](){ ld_r8_r8(REG_D, REG_A); };
+  opcode_table[0x67] = [this](){ ld_r8_r8(REG_H, REG_A); };
+  opcode_table[0x77] = [this](){ ld_hl_r8(REG_A); };
+  opcode_table[0x48] = [this](){ ld_r8_r8(REG_C, REG_B); };
+  opcode_table[0x58] = [this](){ ld_r8_r8(REG_E, REG_B); };
+  opcode_table[0x68] = [this](){ ld_r8_r8(REG_L, REG_B); };
+  opcode_table[0x78] = [this](){ ld_r8_r8(REG_A, REG_B); };
+  opcode_table[0x49] = [this](){ ld_r8_r8(REG_C, REG_C); };
+  opcode_table[0x59] = [this](){ ld_r8_r8(REG_E, REG_C); };
+  opcode_table[0x69] = [this](){ ld_r8_r8(REG_L, REG_C); };
+  opcode_table[0x79] = [this](){ ld_r8_r8(REG_A, REG_C); };
+  opcode_table[0x4A] = [this](){ ld_r8_r8(REG_C, REG_D); };
+  opcode_table[0x5A] = [this](){ ld_r8_r8(REG_E, REG_D); };
+  opcode_table[0x6A] = [this](){ ld_r8_r8(REG_L, REG_D); };
+  opcode_table[0x7A] = [this](){ ld_r8_r8(REG_A, REG_D); };
+  opcode_table[0x4B] = [this](){ ld_r8_r8(REG_C, REG_E); };
+  opcode_table[0x5B] = [this](){ ld_r8_r8(REG_E, REG_E); };
+  opcode_table[0x6B] = [this](){ ld_r8_r8(REG_L, REG_E); };
+  opcode_table[0x7B] = [this](){ ld_r8_r8(REG_A, REG_E); };
+  opcode_table[0x4C] = [this](){ ld_r8_r8(REG_C, REG_H); };
+  opcode_table[0x5C] = [this](){ ld_r8_r8(REG_E, REG_H); };
+  opcode_table[0x6C] = [this](){ ld_r8_r8(REG_L, REG_H); };
+  opcode_table[0x7C] = [this](){ ld_r8_r8(REG_A, REG_H); };
+  opcode_table[0x4D] = [this](){ ld_r8_r8(REG_C, REG_L); };
+  opcode_table[0x5D] = [this](){ ld_r8_r8(REG_E, REG_L); };
+  opcode_table[0x6D] = [this](){ ld_r8_r8(REG_L, REG_L); };
+  opcode_table[0x7D] = [this](){ ld_r8_r8(REG_A, REG_L); };
+  opcode_table[0x4E] = [this](){ ld_r8_hl(REG_C); };
+  opcode_table[0x5E] = [this](){ ld_r8_hl(REG_E); };
+  opcode_table[0x6E] = [this](){ ld_r8_hl(REG_L); };
+  opcode_table[0x7E] = [this](){ ld_r8_hl(REG_A); };
+  opcode_table[0x4F] = [this](){ ld_r8_r8(REG_C, REG_A); };
+  opcode_table[0x5F] = [this](){ ld_r8_r8(REG_E, REG_A); };
+  opcode_table[0x6F] = [this](){ ld_r8_r8(REG_L, REG_A); };
+  opcode_table[0x7F] = [this](){ ld_r8_r8(REG_A, REG_A); };
+
+  opcode_table[0xE0] = [this](){ ldh_n8_a(); };
+  opcode_table[0xF0] = [this](){ ldh_a_n8(); };
+  opcode_table[0xE2] = [this](){ ldh_c_a(); };
+  opcode_table[0xF2] = [this](){ ldh_a_c(); };
+  opcode_table[0xEA] = [this](){ ld_n16_a(); };
+  opcode_table[0xFA] = [this](){ ld_a_n16(); };
+
 
   // Instruction instruction_table[256] = {
   //
@@ -138,11 +418,11 @@ Emulator::Emulator(char *rom_path) {
   // };
 }
 
-Emulator::~Emulator() {
+Cpu::~Cpu() {
 
 }
 
-unsigned char Emulator::read_byte(unsigned short address) const {
+unsigned char Cpu::read_byte(unsigned short address) const {
   // reading from ROM bank
   if (address >= 0x4000 && address <= 0x7FFF) {
     unsigned short offset = address - 0x4000;
@@ -159,13 +439,13 @@ unsigned char Emulator::read_byte(unsigned short address) const {
 }
 
 // gameboy is little endian
-unsigned short Emulator::read_word(unsigned short address) const {
+unsigned short Cpu::read_word(unsigned short address) const {
   unsigned char lower_byte = read_byte(address);
   unsigned char upper_byte = read_byte(address + 1);
   return (upper_byte << 8) | lower_byte;
 }
 
-void Emulator::write_byte(unsigned short address, unsigned char data) {
+void Cpu::write_byte(unsigned short address, unsigned char data) {
   // 0x0000-0x7FFF is read only
   if (address < 0x8000) {
     handle_banking(address, data);
@@ -183,12 +463,16 @@ void Emulator::write_byte(unsigned short address, unsigned char data) {
     return;
   }
 
+  else if (address == 0xFF04) { // DIV register (timer)
+    mem[0xFF04] = 0;
+  }
+
   else {
     mem[address] = data;
   }
 }
 
-void Emulator::handle_banking(unsigned short address, unsigned char data) {
+void Cpu::handle_banking(unsigned short address, unsigned char data) {
   if (rom_banking_type == MBC1) {
     if (address < 0x2000) {
       unsigned char lower_bits = data & 0xF;
@@ -230,39 +514,39 @@ void Emulator::handle_banking(unsigned short address, unsigned char data) {
   }
 }
 
-void Emulator::write_r8(REGISTER r8, unsigned char data) {
+void Cpu::write_r8(REGISTER r8, unsigned char data) {
   unsigned char *reg = find_r8(r8);
   *reg = data;
 }
 
-void Emulator::write_r16(REGISTER r16, unsigned short data) {
+void Cpu::write_r16(REGISTER r16, unsigned short data) {
   unsigned short *reg = find_r16(r16);
   *reg = data;
 }
 
-unsigned char Emulator::read_r8(REGISTER r8) {
+unsigned char Cpu::read_r8(REGISTER r8) {
   unsigned char *reg = find_r8(r8);
   return *reg;
 }
 
-unsigned short Emulator::read_r16(REGISTER r16) {
+unsigned short Cpu::read_r16(REGISTER r16) {
   unsigned short *reg = find_r16(r16);
   return *reg;
 }
 
-unsigned char Emulator::next8() {
+unsigned char Cpu::next8() {
   unsigned char data = read_byte(pc);
   pc++;
   return data;
 }
 
-unsigned short Emulator::next16() {
+unsigned short Cpu::next16() {
   unsigned short data = read_word(pc);
   pc += 2;
   return data;
 }
 
-void Emulator::set_flag(int flagbit, bool set) {
+void Cpu::set_flag(int flagbit, bool set) {
   // create the bit mask using bit shift
   unsigned char mask = 1 << flagbit;
   unsigned char *flag_reg = find_r8(REG_F);
@@ -276,16 +560,16 @@ void Emulator::set_flag(int flagbit, bool set) {
   }
 }
 
-bool Emulator::get_flag(int flagbit) { 
+bool Cpu::get_flag(int flagbit) { 
   unsigned char mask = 1 << flagbit;
   return read_r8(REG_F) & mask;
 }
 
-void Emulator::update() {
+void Cpu::update() {
   // max cycles per frame (60 frames per second)
-  const int MAXCYCLES = CYCLES_PER_SECOND / 60;
+  const int CYCLES_PER_FRAME = CYCLES_PER_SECOND / 60;
   int cycles_this_update = 0;
-  while (cycles_this_update < MAXCYCLES) {
+  while (cycles_this_update < CYCLES_PER_FRAME) {
     // perform a cycle
     // update timers
     // update graphics
@@ -294,7 +578,7 @@ void Emulator::update() {
   // render the screen
 }
 
-void Emulator::fetch_and_execute() {
+void Cpu::fetch_and_execute() {
   unsigned char opcode = read_byte(pc);
   pc++;
   auto& opcode_function = opcode_table[opcode];
@@ -317,7 +601,7 @@ void Emulator::fetch_and_execute() {
 
 // it is up to the caller to know whether the register
 // they are looking for is a 1 byte register or a 2 byte register
-unsigned char *Emulator::find_r8(REGISTER reg) {
+unsigned char *Cpu::find_r8(REGISTER reg) {
   unsigned char *target_register;
   switch(reg) {
     case REG_A:
@@ -350,7 +634,7 @@ unsigned char *Emulator::find_r8(REGISTER reg) {
   return target_register; 
 }
 
-unsigned short *Emulator::find_r16(REGISTER reg) {
+unsigned short *Cpu::find_r16(REGISTER reg) {
   unsigned short *target_register;
   switch(reg) {
     case REG_AF:
@@ -375,14 +659,14 @@ unsigned short *Emulator::find_r16(REGISTER reg) {
  * load instructions
  */
 
-void Emulator::ld_r8_r8(REGISTER reg1, REGISTER reg2) {
+void Cpu::ld_r8_r8(REGISTER reg1, REGISTER reg2) {
   // copy reg2 into reg1
   unsigned char *reg1_ptr = find_r8(reg1);
   unsigned char *reg2_ptr = find_r8(reg2);
   *reg1_ptr = *reg2_ptr;
 }
 
-void Emulator::ld_r8_n8(REGISTER r8) {
+void Cpu::ld_r8_n8(REGISTER r8) {
   // copy n8 into r8 
   unsigned short n8 = read_byte(pc);
   pc++;
@@ -390,7 +674,7 @@ void Emulator::ld_r8_n8(REGISTER r8) {
   *reg = n8;
 }
 
-void Emulator::ld_r16_n16(REGISTER r16) {
+void Cpu::ld_r16_n16(REGISTER r16) {
   // copy n16 into r16
   // assumes little endian
   unsigned short n16 = read_word(pc);
@@ -399,13 +683,13 @@ void Emulator::ld_r16_n16(REGISTER r16) {
   *reg = n16;
 }
 
-void Emulator::ld_hl_r8(REGISTER r8) {
+void Cpu::ld_hl_r8(REGISTER r8) {
   // copy the value in r8 into the byte pointed to by HL
   unsigned short byte_loc = HL.reg;
   write_byte(byte_loc, read_r8(r8));
 }
 
-void Emulator::ld_hl_n8() {
+void Cpu::ld_hl_n8() {
   // copy the value in n8 into the byte pointed to by HL
   unsigned char n8 = read_byte(pc);
   pc++;
@@ -413,7 +697,7 @@ void Emulator::ld_hl_n8() {
   write_byte(byte_loc, n8);
 }
 
-void Emulator::ld_r8_hl(REGISTER r8) {
+void Cpu::ld_r8_hl(REGISTER r8) {
   // copy the value pointed to by HL into r8
   unsigned short byte_loc = HL.reg;
   unsigned char byte_val = read_byte(byte_loc);
@@ -421,21 +705,21 @@ void Emulator::ld_r8_hl(REGISTER r8) {
   *reg = byte_val;
 }
 
-void Emulator::ld_r16_a(REGISTER r16) {
+void Cpu::ld_r16_a(REGISTER r16) {
   // copy the value in register A into the byte pointed to by r16
   unsigned char reg_a = AF.first;
   unsigned short r16_loc = *find_r16(r16);
   write_byte(r16_loc, reg_a);
 }
 
-void Emulator::ld_n16_a() {
+void Cpu::ld_n16_a() {
   // copy the value in register A into the byte at address n16
   unsigned short loc = read_word(pc);
   pc += 2;
   write_byte(loc, AF.first);
 }
 
-void Emulator::ldh_n8_a() {
+void Cpu::ldh_n8_a() {
   // copy the value in register A into the byte at address n8
   // provided the address is between 0xFF00 and 0xFFFF
   unsigned char loc = read_byte(pc);
@@ -444,37 +728,37 @@ void Emulator::ldh_n8_a() {
   write_byte(loc, AF.first);
 }
 
-void Emulator::ldh_c_a() {
+void Cpu::ldh_c_a() {
   // copy the value in register A into the byte at address 0xFF00 + C
   write_byte(0xFF00 + BC.second, AF.first);
 }
 
-void Emulator::ld_a_r16(REGISTER r16) {
+void Cpu::ld_a_r16(REGISTER r16) {
   // copy the byte pointed to by r16 into register A  
   unsigned short *reg = find_r16(r16);
   unsigned char val = read_byte(*reg);
   write_r8(REG_A, val);
 }
 
-void Emulator::ld_a_n16() {
+void Cpu::ld_a_n16() {
   unsigned short n16 = next16();
   write_r8(REG_A, read_byte(n16));
 }
 
-void Emulator::ldh_a_n8() {
+void Cpu::ldh_a_n8() {
   // load into register A the data from the address specified by 
   // n8 + 0xFF00
   unsigned short n8 = next8();
   write_r8(REG_A, read_byte(0xFF00 + n8));
 }
 
-void Emulator::ldh_a_c() {
+void Cpu::ldh_a_c() {
   // copy the byte from address 0xFF00 + C into register A
   unsigned char val = 0xFF00 + read_r8(REG_C);
   write_r8(REG_A, val);
 }
 
-void Emulator::ld_hli_a() {
+void Cpu::ld_hli_a() {
   // copy the value in register A into the byte pointed to by HL
   // and increment HL afterwards
   unsigned char val = read_r8(REG_A);
@@ -483,7 +767,7 @@ void Emulator::ld_hli_a() {
   HL.reg++;
 }
 
-void Emulator::ld_hld_a() {
+void Cpu::ld_hld_a() {
   // copy A into byte pointed by HL and decrement HL
   unsigned char val = read_r8(REG_A);
   unsigned short loc = HL.reg;
@@ -491,14 +775,14 @@ void Emulator::ld_hld_a() {
   HL.reg--;
 }
 
-void Emulator::ld_a_hld() {
+void Cpu::ld_a_hld() {
   // copy byte pointed by HL into A and decrement HL after
   unsigned char val = read_byte(HL.reg);
   write_r8(REG_A, val);
   HL.reg--;
 }
 
-void Emulator::ld_a_hli() {
+void Cpu::ld_a_hli() {
   // copy byte pointed by HL into A and increment HL after
   write_r8(REG_A, read_byte(HL.reg));
   HL.reg--;
@@ -509,7 +793,7 @@ void Emulator::ld_a_hli() {
  * 8-bit arithmetic instructions
  */
 
-void Emulator::adc_a_helper(uint8_t val) {
+void Cpu::adc_a_helper(uint8_t val) {
   uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
   uint8_t prev = AF.first;
   AF.first = AF.first + val + carry_flag;
@@ -521,20 +805,20 @@ void Emulator::adc_a_helper(uint8_t val) {
   set_flag(FLAG_C, res > 0xFF);
 }
 
-void Emulator::adc_a_r8(REGISTER r8) {
+void Cpu::adc_a_r8(REGISTER r8) {
   // add the value in r8 plus the carry flag to A
   adc_a_helper(read_r8(r8));
 }
 
-void Emulator::adc_a_hl() {
+void Cpu::adc_a_hl() {
   adc_a_helper(read_byte(HL.reg));
 }
 
-void Emulator::adc_a_n8() {
+void Cpu::adc_a_n8() {
   adc_a_helper(next8());
 }
 
-void Emulator::add_a_helper(uint8_t val) {
+void Cpu::add_a_helper(uint8_t val) {
   // helper for the following add instructions
   uint8_t prev = AF.first;
   AF.first = AF.first + val;
@@ -544,38 +828,38 @@ void Emulator::add_a_helper(uint8_t val) {
   set_flag(FLAG_C, prev + val > 0xFF);
 }
 
-void Emulator::add_a_r8(REGISTER r8) {
+void Cpu::add_a_r8(REGISTER r8) {
   add_a_helper(read_r8(r8));
 }
 
-void Emulator::add_a_hl() {
+void Cpu::add_a_hl() {
   add_a_helper(read_byte(HL.reg));
 }
 
-void Emulator::add_a_n8() {
+void Cpu::add_a_n8() {
   add_a_helper(next8());
 }
 
-void Emulator::cp_a_helper(uint8_t val) {
+void Cpu::cp_a_helper(uint8_t val) {
   set_flag(FLAG_Z, AF.first == val);
   set_flag(FLAG_N, 1);
   set_flag(FLAG_H, (AF.first & 0xF) < (val & 0xF));
   set_flag(FLAG_C, AF.first < val);
 }
 
-void Emulator::cp_a_r8(REGISTER r8) {
+void Cpu::cp_a_r8(REGISTER r8) {
   cp_a_helper(read_r8(r8));
 }
 
-void Emulator::cp_a_hl() {
+void Cpu::cp_a_hl() {
   cp_a_helper(read_byte(HL.reg));
 }
 
-void Emulator::cp_a_n8() {
+void Cpu::cp_a_n8() {
   cp_a_helper(next8());
 }
 
-void Emulator::dec_r8(REGISTER r8) {
+void Cpu::dec_r8(REGISTER r8) {
   uint8_t *reg = find_r8(r8);
   uint8_t prev = *reg;
   *reg = *reg - 1;
@@ -584,7 +868,7 @@ void Emulator::dec_r8(REGISTER r8) {
   set_flag(FLAG_H, (prev & 0xF) == 0);
 }
 
-void Emulator::dec_hl() {
+void Cpu::dec_hl() {
   uint8_t prev = read_byte(HL.reg);
   write_byte(HL.reg, prev - 1);
   set_flag(FLAG_Z, read_byte(HL.reg) == 0);
@@ -592,7 +876,7 @@ void Emulator::dec_hl() {
   set_flag(FLAG_H, (prev & 0xF) == 0);
 }
 
-void Emulator::inc_r8(REGISTER r8) {
+void Cpu::inc_r8(REGISTER r8) {
   uint8_t *reg = find_r8(r8);
   uint8_t prev = *reg;
   *reg = *reg + 1;
@@ -601,7 +885,7 @@ void Emulator::inc_r8(REGISTER r8) {
   set_flag(FLAG_H, (prev & 0xF) == 0xF);
 }
 
-void Emulator::inc_hl() {
+void Cpu::inc_hl() {
   uint8_t prev = read_byte(HL.reg);
   write_byte(HL.reg, prev + 1);
   set_flag(FLAG_Z, read_byte(HL.reg) == 0);
@@ -609,7 +893,7 @@ void Emulator::inc_hl() {
   set_flag(FLAG_H, (prev & 0xF) == 0xF);  
 }
 
-void Emulator::sbc_a_helper(uint8_t val) {
+void Cpu::sbc_a_helper(uint8_t val) {
   uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
   uint8_t prev = AF.first;
   AF.first = AF.first - val - carry_flag;
@@ -619,19 +903,19 @@ void Emulator::sbc_a_helper(uint8_t val) {
   set_flag(FLAG_C, val + carry_flag > prev);
 }
 
-void Emulator::sbc_a_r8(REGISTER r8) {
+void Cpu::sbc_a_r8(REGISTER r8) {
   sbc_a_helper(read_r8(r8));
 }
 
-void Emulator::sbc_a_hl() {
+void Cpu::sbc_a_hl() {
   sbc_a_helper(read_byte(HL.reg));
 }
 
-void Emulator::sbc_a_n8() {
+void Cpu::sbc_a_n8() {
   sbc_a_helper(next8());
 }
 
-void Emulator::sub_a_helper(uint8_t val) {
+void Cpu::sub_a_helper(uint8_t val) {
   uint8_t prev = AF.first;
   AF.first -= val;
   set_flag(FLAG_Z, AF.first == 0);
@@ -640,15 +924,15 @@ void Emulator::sub_a_helper(uint8_t val) {
   set_flag(FLAG_C, prev < val);
 }
 
-void Emulator::sub_a_r8(REGISTER r8) {
+void Cpu::sub_a_r8(REGISTER r8) {
   sub_a_helper(read_r8(r8));
 }
 
-void Emulator::sub_a_hl() {
+void Cpu::sub_a_hl() {
   sub_a_helper(read_byte(HL.reg));
 }
 
-void Emulator::sub_a_n8() {
+void Cpu::sub_a_n8() {
   sub_a_helper(next8());
 }
 
@@ -657,7 +941,7 @@ void Emulator::sub_a_n8() {
  * 16-bit arithmetic instructions
  */
 
-void Emulator::add_hl_r16(REGISTER r16) {
+void Cpu::add_hl_r16(REGISTER r16) {
   uint16_t val = read_r16(r16);
   uint16_t prev = HL.reg;
   HL.reg += val;
@@ -666,12 +950,12 @@ void Emulator::add_hl_r16(REGISTER r16) {
   set_flag(FLAG_C, prev + val > 0xFFFF);
 }
 
-void Emulator::dec_r16(REGISTER r16) {
+void Cpu::dec_r16(REGISTER r16) {
   uint16_t *reg = find_r16(r16);
   *reg -= 1;
 }
 
-void Emulator::inc_r16(REGISTER r16) {
+void Cpu::inc_r16(REGISTER r16) {
   uint16_t *reg = find_r16(r16);
   *reg += 1;
 }
@@ -681,7 +965,7 @@ void Emulator::inc_r16(REGISTER r16) {
  * bitwise logic instructions
  */
 
-void Emulator::and_a_helper(uint8_t val) {
+void Cpu::and_a_helper(uint8_t val) {
   AF.first &= val;
   set_flag(FLAG_Z, AF.first == 0);
   set_flag(FLAG_N, 0);
@@ -689,25 +973,25 @@ void Emulator::and_a_helper(uint8_t val) {
   set_flag(FLAG_C, 0);
 }
 
-void Emulator::and_a_r8(REGISTER r8) {
+void Cpu::and_a_r8(REGISTER r8) {
   and_a_helper(read_r8(r8));
 }
 
-void Emulator::and_a_hl() {
+void Cpu::and_a_hl() {
   and_a_helper(read_byte(HL.reg));
 }
 
-void Emulator::and_a_n8() {
+void Cpu::and_a_n8() {
   and_a_helper(next8());
 }
 
-void Emulator::cpl() {
+void Cpu::cpl() {
   AF.first = ~AF.first;
   set_flag(FLAG_N, 1);
   set_flag(FLAG_H, 1);
 }
 
-void Emulator::or_a_helper(uint8_t val) {
+void Cpu::or_a_helper(uint8_t val) {
   AF.first |= val;
   set_flag(FLAG_Z, AF.first == 0);
   set_flag(FLAG_N, 0);
@@ -715,19 +999,19 @@ void Emulator::or_a_helper(uint8_t val) {
   set_flag(FLAG_C, 0);
 }
 
-void Emulator::or_a_r8(REGISTER r8) {
+void Cpu::or_a_r8(REGISTER r8) {
   or_a_helper(read_r8(r8));
 }
 
-void Emulator::or_a_hl() {
+void Cpu::or_a_hl() {
   or_a_helper(read_byte(HL.reg));
 }
 
-void Emulator::or_a_n8() {
+void Cpu::or_a_n8() {
   or_a_helper(next8());
 }
 
-void Emulator::xor_a_helper(uint8_t val) {
+void Cpu::xor_a_helper(uint8_t val) {
   AF.first ^= val;
   set_flag(FLAG_Z, AF.first == 0);
   set_flag(FLAG_N, 0);
@@ -735,15 +1019,15 @@ void Emulator::xor_a_helper(uint8_t val) {
   set_flag(FLAG_C, 0);
 }
 
-void Emulator::xor_a_r8(REGISTER r8) {
+void Cpu::xor_a_r8(REGISTER r8) {
   xor_a_helper(read_r8(r8));
 }
 
-void Emulator::xor_a_hl() {
+void Cpu::xor_a_hl() {
   xor_a_helper(read_byte(HL.reg));
 }
 
-void Emulator::xor_a_n8() {
+void Cpu::xor_a_n8() {
   xor_a_helper(next8());
 }
 
@@ -752,7 +1036,7 @@ void Emulator::xor_a_n8() {
  * bit flag instructions
  */
 
-void Emulator::bit_u3_r8(uint8_t bit, REGISTER r8) {
+void Cpu::bit_u3_r8(uint8_t bit, REGISTER r8) {
   uint8_t mask = 1 << bit;
   uint8_t reg = read_r8(r8);
   set_flag(FLAG_Z, (reg & mask) == 0);
@@ -760,7 +1044,7 @@ void Emulator::bit_u3_r8(uint8_t bit, REGISTER r8) {
   set_flag(FLAG_H, 1);
 }
 
-void Emulator::bit_u3_hl(uint8_t bit) {
+void Cpu::bit_u3_hl(uint8_t bit) {
   uint8_t mask = 1 << bit;
   uint8_t val = read_byte(HL.reg);
   set_flag(FLAG_Z, (val & mask) == 0);
@@ -768,26 +1052,26 @@ void Emulator::bit_u3_hl(uint8_t bit) {
   set_flag(FLAG_H, 1);
 }
 
-void Emulator::res_u3_r8(uint8_t bit, REGISTER r8) {
+void Cpu::res_u3_r8(uint8_t bit, REGISTER r8) {
   uint8_t mask = 1 << bit;
   mask = ~mask;
   uint8_t *reg = find_r8(r8);
   *reg &= mask;
 }
 
-void Emulator::res_u3_hl(uint8_t bit) {
+void Cpu::res_u3_hl(uint8_t bit) {
   uint8_t mask = 1 << bit;
   mask = ~mask;
   write_byte(HL.reg, read_byte(HL.reg) & mask);
 }
 
-void Emulator::set_u3_r8(uint8_t bit, REGISTER r8) {
+void Cpu::set_u3_r8(uint8_t bit, REGISTER r8) {
   uint8_t mask = 1 << bit;
   uint8_t *reg = find_r8(r8);
   *reg |= mask;
 }
 
-void Emulator::set_u3_hl(uint8_t bit) {
+void Cpu::set_u3_hl(uint8_t bit) {
   uint8_t mask = 1 << bit;
   write_byte(HL.reg, read_byte(HL.reg) | mask);
 }
@@ -797,13 +1081,13 @@ void Emulator::set_u3_hl(uint8_t bit) {
  * bit shift instructions
  */
 
-void Emulator::set_shift_flags(uint8_t val) {
+void Cpu::set_shift_flags(uint8_t val) {
   set_flag(FLAG_Z, val == 0);
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, 0);
 }
 
-void Emulator::rl_r8(REGISTER r8) {
+void Cpu::rl_r8(REGISTER r8) {
   uint8_t reg = read_r8(r8);
   uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
   set_flag(FLAG_C, reg & 0x80); //most significant bit
@@ -814,7 +1098,7 @@ void Emulator::rl_r8(REGISTER r8) {
   set_shift_flags(reg);
 }
 
-void Emulator::rl_hl() {
+void Cpu::rl_hl() {
   uint8_t val = read_byte(HL.reg);
   uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
   set_flag(FLAG_C, val & 0x80); //most significant bit
@@ -825,7 +1109,7 @@ void Emulator::rl_hl() {
   set_shift_flags(val);
 }
 
-void Emulator::rla() {
+void Cpu::rla() {
   uint8_t val = AF.first;
   uint8_t carry_flag = get_flag(FLAG_C) ? 1 : 0;
   set_flag(FLAG_C, val & 0x80); //most significant bit
@@ -836,7 +1120,7 @@ void Emulator::rla() {
   set_shift_flags(1); // RESET zero flag
 }
 
-void Emulator::rlc_r8(REGISTER r8) {
+void Cpu::rlc_r8(REGISTER r8) {
   uint8_t reg = read_r8(r8);
   uint8_t msb = reg & 0x80 ? 1 : 0;
   set_flag(FLAG_C, msb); //most significant bit
@@ -847,7 +1131,7 @@ void Emulator::rlc_r8(REGISTER r8) {
   set_shift_flags(reg);
 }
 
-void Emulator::rlc_hl() {
+void Cpu::rlc_hl() {
   uint8_t val = read_byte(HL.reg);
   uint8_t msb = val & 0x80 ? 1 : 0;
   set_flag(FLAG_C, msb); //most significant bit
@@ -858,7 +1142,7 @@ void Emulator::rlc_hl() {
   set_shift_flags(val);
 }
 
-void Emulator::rlca() {
+void Cpu::rlca() {
   uint8_t val = AF.first;
   uint8_t msb = val & 0x80 ? 1 : 0;
   set_flag(FLAG_C, msb); //most significant bit
@@ -869,7 +1153,7 @@ void Emulator::rlca() {
   set_shift_flags(1); // RESET zero flag
 }
 
-void Emulator::rr_r8(REGISTER r8) {
+void Cpu::rr_r8(REGISTER r8) {
   uint8_t reg = read_r8(r8);
   uint8_t carry_flag = get_flag(FLAG_C) ? 0x80 : 0;
   set_flag(FLAG_C, reg & 0x1); //least significant bit
@@ -880,7 +1164,7 @@ void Emulator::rr_r8(REGISTER r8) {
   set_shift_flags(reg);
 }
 
-void Emulator::rr_hl() {
+void Cpu::rr_hl() {
   uint8_t val = read_byte(HL.reg);
   uint8_t carry_flag = get_flag(FLAG_C) ? 0x80 : 0;
   set_flag(FLAG_C, val & 0x1); //least significant bit
@@ -891,7 +1175,7 @@ void Emulator::rr_hl() {
   set_shift_flags(val);
 }
 
-void Emulator::rra() {
+void Cpu::rra() {
   uint8_t val = AF.first;
   uint8_t carry_flag = get_flag(FLAG_C) ? 0x80 : 0;
   set_flag(FLAG_C, val & 0x1); //least significant bit
@@ -901,7 +1185,7 @@ void Emulator::rra() {
   set_shift_flags(1); // RESET zero flag
 }
 
-void Emulator::rrc_r8(REGISTER r8) {
+void Cpu::rrc_r8(REGISTER r8) {
   uint8_t val = read_r8(r8);
   uint8_t lsb = val & 0x1 ? 0x80 : 0;
   set_flag(FLAG_C, lsb); //least significant bit
@@ -911,7 +1195,7 @@ void Emulator::rrc_r8(REGISTER r8) {
   set_shift_flags(val);
 }
 
-void Emulator::rrc_hl() {
+void Cpu::rrc_hl() {
   uint8_t val = read_byte(HL.reg);
   uint8_t lsb = val & 0x1 ? 0x80 : 0;
   set_flag(FLAG_C, lsb); //least significant bit
@@ -921,7 +1205,7 @@ void Emulator::rrc_hl() {
   set_shift_flags(val);
 }
 
-void Emulator::rrca() {
+void Cpu::rrca() {
   uint8_t val = AF.first;
   uint8_t lsb = val & 0x1 ? 0x80 : 0;
   set_flag(FLAG_C, lsb); //least significant bit
@@ -931,7 +1215,7 @@ void Emulator::rrca() {
   set_shift_flags(1); //RESET zero flag
 }
 
-void Emulator::sla_r8(REGISTER r8) {
+void Cpu::sla_r8(REGISTER r8) {
   uint8_t val = read_r8(r8);
   set_flag(FLAG_C, val & 0x80);
   val <<= 1;
@@ -939,7 +1223,7 @@ void Emulator::sla_r8(REGISTER r8) {
   set_shift_flags(val);
 }
 
-void Emulator::sla_hl() {
+void Cpu::sla_hl() {
   uint8_t val = read_byte(HL.reg);
   set_flag(FLAG_C, val & 0x80);
   val <<= 1;
@@ -947,7 +1231,7 @@ void Emulator::sla_hl() {
   set_shift_flags(val);
 }
 
-void Emulator::sra_r8(REGISTER r8) {
+void Cpu::sra_r8(REGISTER r8) {
   uint8_t val = read_r8(r8);
   set_flag(FLAG_C, val & 0x1);
   uint8_t mask = val & 0x80; // msb
@@ -957,7 +1241,7 @@ void Emulator::sra_r8(REGISTER r8) {
   set_shift_flags(val);
 }
 
-void Emulator::sra_hl() {
+void Cpu::sra_hl() {
   uint8_t val = read_byte(HL.reg);
   set_flag(FLAG_C, val & 0x1);
   uint8_t mask = val & 0x80; // msb
@@ -967,7 +1251,7 @@ void Emulator::sra_hl() {
   set_shift_flags(val);
 }
 
-void Emulator::srl_r8(REGISTER r8) {
+void Cpu::srl_r8(REGISTER r8) {
   uint8_t val = read_r8(r8);
   set_flag(FLAG_C, val & 0x1);
   val >>= 1;
@@ -975,7 +1259,7 @@ void Emulator::srl_r8(REGISTER r8) {
   set_shift_flags(val);
 }
 
-void Emulator::srl_hl() {
+void Cpu::srl_hl() {
   uint8_t val = read_byte(HL.reg);
   set_flag(FLAG_C, val & 0x1);
   val >>= 1;
@@ -983,7 +1267,7 @@ void Emulator::srl_hl() {
   set_shift_flags(val);
 }
 
-void Emulator::swap_r8(REGISTER r8) {
+void Cpu::swap_r8(REGISTER r8) {
   uint8_t val = read_r8(r8);
   uint8_t lower_four = val & 0xF;
   lower_four <<= 4;
@@ -996,7 +1280,7 @@ void Emulator::swap_r8(REGISTER r8) {
   set_flag(FLAG_C, 0);
 }
 
-void Emulator::swap_hl() {
+void Cpu::swap_hl() {
   uint8_t val = read_byte(HL.reg);
   uint8_t lower_four = val & 0xF;
   lower_four <<= 4;
@@ -1014,7 +1298,7 @@ void Emulator::swap_hl() {
  * jumps and subroutine instructions
  */
 
-void Emulator::call_n16() {
+void Cpu::call_n16() {
   uint16_t n16 = next16();
   // next16() increments the program counter so it should
   // be on the next instruction
@@ -1027,55 +1311,55 @@ void Emulator::call_n16() {
   pc = n16;
 }
 
-void Emulator::call_cc_n16(int flag, bool condition) {
+void Cpu::call_cc_n16(int flag, bool condition) {
   if (get_flag(flag) == condition) {
     call_n16();
   }
 }
 
-void Emulator::jp_hl() {
+void Cpu::jp_hl() {
   pc = HL.reg;
 }
 
-void Emulator::jp_n16() {
+void Cpu::jp_n16() {
   uint16_t address = next16();
   pc = address;
 }
 
-void Emulator::jp_cc_n16(int flag, bool condition) {
+void Cpu::jp_cc_n16(int flag, bool condition) {
   if (get_flag(flag) == condition) {
     jp_n16();
   }
 }
 
-void Emulator::jr_e8() {
+void Cpu::jr_e8() {
   int8_t e8 = (int8_t)next8();
   pc += e8;
 }
 
-void Emulator::jr_cc_e8(int flag, bool condition) {
+void Cpu::jr_cc_e8(int flag, bool condition) {
   if( get_flag(flag) == condition ) {
     jr_e8();
   }
 }
 
-void Emulator::ret() {
+void Cpu::ret() {
   pc = read_word(sp);
   sp += 2;
 }
 
-void Emulator::ret_cc(int flag, bool condition) {
+void Cpu::ret_cc(int flag, bool condition) {
   if (get_flag(flag) == condition) {
     ret();
   }
 }
 
-void Emulator::reti() {
+void Cpu::reti() {
   ret();
   ime = 1;
 }
 
-void Emulator::rst_vec(uint8_t n) {
+void Cpu::rst_vec(uint8_t n) {
   uint16_t addr = n | 0x0000;
   // pc is already at the next instruction
   write_byte(--sp, pc >> 8); // most significant byte
@@ -1087,13 +1371,13 @@ void Emulator::rst_vec(uint8_t n) {
  * carry flag instructions
  */
 
-void Emulator::ccf() {
+void Cpu::ccf() {
   set_flag(FLAG_C, !get_flag(FLAG_C));
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, 0);
 }
 
-void Emulator::scf() {
+void Cpu::scf() {
   set_flag(FLAG_C, 1);
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, 0);
@@ -1104,7 +1388,7 @@ void Emulator::scf() {
  * stack manipulation instructions
  */
 
-void Emulator::add_hl_sp() {
+void Cpu::add_hl_sp() {
   uint16_t prev = HL.reg;
   HL.reg += sp;
   set_flag(FLAG_N, 0);
@@ -1112,7 +1396,7 @@ void Emulator::add_hl_sp() {
   set_flag(FLAG_C, prev + sp > 0xFFFF);
 }
 
-void Emulator::add_sp_e8() {
+void Cpu::add_sp_e8() {
   int8_t e8 = (int8_t)next8();
   uint8_t prev = sp & 0xFF;
   sp += e8;
@@ -1124,20 +1408,20 @@ void Emulator::add_sp_e8() {
   set_flag(FLAG_C, prev + u8 > 0xFF);
 }
 
-void Emulator::dec_sp() {
+void Cpu::dec_sp() {
   sp--;
 }
 
-void Emulator::inc_sp() {
+void Cpu::inc_sp() {
   sp++;
 }
 
-void Emulator::ld_sp_n16() {
+void Cpu::ld_sp_n16() {
   // copy n16 into sp 
   sp = next16();
 }
 
-void Emulator::ld_n16_sp() {
+void Cpu::ld_n16_sp() {
   // copy sp into n16 and n16 + 1
   // little endian so write least significant byte first
   unsigned short n16 = next16();
@@ -1145,7 +1429,7 @@ void Emulator::ld_n16_sp() {
   write_byte(n16 + 1, sp >> 8);
 }
 
-void Emulator::ld_hl_sp_e8() {
+void Cpu::ld_hl_sp_e8() {
   // add e8 to sp and copy result into HL; don't update sp
   int8_t e8 = next8();
   HL.reg = e8 + sp;  
@@ -1162,29 +1446,29 @@ void Emulator::ld_hl_sp_e8() {
   else set_flag(FLAG_C, 0);
 }
 
-void Emulator::ld_sp_hl() {
+void Cpu::ld_sp_hl() {
   // copy HL into sp
   sp = HL.reg;
 }
 
-void Emulator::pop_af() {
+void Cpu::pop_af() {
   AF.second = read_byte(sp++);
   AF.first = read_byte(sp++);
 }
 
-void Emulator::pop_r16(REGISTER r16) {
+void Cpu::pop_r16(REGISTER r16) {
   uint8_t low = read_byte(sp++);
   uint8_t high = read_byte(sp++);
   uint16_t val = (high << 8) | low;
   write_r16(r16, val);
 }
 
-void Emulator::push_af() {
+void Cpu::push_af() {
   write_byte(--sp, AF.first);
   write_byte(--sp, AF.second);
 }
 
-void Emulator::push_r16(REGISTER r16) {
+void Cpu::push_r16(REGISTER r16) {
   uint16_t val = read_r16(r16);
   uint8_t high = val & 0xFF00;
   uint8_t low = val & 0x00FF;
@@ -1197,16 +1481,16 @@ void Emulator::push_r16(REGISTER r16) {
  * interrupt related instructions
  */
 
-void Emulator::di() {
+void Cpu::di() {
   ime = 0;
 }
 
-void Emulator::ei() {
+void Cpu::ei() {
   set_ime = true;
   is_last_instr_ei = true;
 }
 
-void Emulator::halt() {
+void Cpu::halt() {
   //TODO
 }
 
@@ -1215,7 +1499,7 @@ void Emulator::halt() {
 * special instructions
 */
 
-void Emulator::daa() {
+void Cpu::daa() {
   uint8_t adjustment = 0;
   if (get_flag(FLAG_N)) {
     if (get_flag(FLAG_H)) adjustment += 0x6;
@@ -1235,11 +1519,11 @@ void Emulator::daa() {
   set_flag(FLAG_H, 0);
 }
 
-void Emulator::nop() {
+void Cpu::nop() {
   // do nothing
   return;
 }
 
-void Emulator::stop() {
+void Cpu::stop() {
   //TODO
 }

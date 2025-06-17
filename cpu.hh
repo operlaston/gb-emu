@@ -1,17 +1,18 @@
 #ifndef CPU_H
 #define CPU_H
-#include <cinttypes>
-#include <string>
 #include <cstring>
 #include <stdio.h>
-#include <iostream>
 #include <stdint.h>
+#include <iostream>
 
 #define FLAG_Z (7) // zero flag
 #define FLAG_N (6) // subtract flag
 #define FLAG_H (5) // half carry flag
 #define FLAG_C (4) // carry flag
 #define CYCLES_PER_SECOND (4194304)
+#define TIMA_ADDR (0xFF05) // the address of the timer
+#define TMA_ADDR (0xFF06) // address of the value to reset the timer to
+#define TAC_ADDR (0xFF07) // address of the frequency of the timer
 
 enum banking_types {
   MBC1,
@@ -45,7 +46,7 @@ union reg_t{
   unsigned short reg;
 };
 
-class Emulator { 
+class Cpu { 
   unsigned char mem[0x10000];
   unsigned char rom[0x200000];
   unsigned char num_rom_banks; // rom banks are 16KiB in size
@@ -233,8 +234,8 @@ class Emulator {
   void set_shift_flags(uint8_t);
 
 public: 
-  Emulator(char *rom_path);
-  ~Emulator();
+  Cpu(char *rom_path);
+  ~Cpu();
   void update();
 };
 
