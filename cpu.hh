@@ -5,14 +5,38 @@
 #include <stdint.h>
 #include <iostream>
 
+// flags (F register)
 #define FLAG_Z (7) // zero flag
 #define FLAG_N (6) // subtract flag
 #define FLAG_H (5) // half carry flag
 #define FLAG_C (4) // carry flag
+
+// cpu cycles per second
 #define CYCLES_PER_SECOND (4194304)
-#define TIMA_ADDR (0xFF05) // the address of the timer
-#define TMA_ADDR (0xFF06) // address of the value to reset the timer to
-#define TAC_ADDR (0xFF07) // address of the frequency of the timer
+
+// timer registers (addresses in memory)
+#define DIV_REG (0xFF04) // div timer
+#define TIMA_REG (0xFF05) // the address of the timer
+#define TMA_REG (0xFF06) // address of the value to reset the timer to
+#define TAC_REG (0xFF07) // address of the frequency of the timer
+
+// interrupt registers
+#define IF_REG (0xFF0F)
+#define IE_REG (0xFFFF)
+
+// interrupt bit positions
+#define VBLANK_INTER (0)
+#define LCD_INTER (1) // aka stat
+#define TIMER_INTER (2)
+#define SERIAL_INTER (3)
+#define JOYPAD_INTER (4)
+
+// interrupt mem addresses
+#define VBLANK_HANDLER (0x40)
+#define LCD_HANDLER (0x48) // aka stat
+#define TIMER_HANDLER (0x50)
+#define SERIAL_HANDLER (0x58)
+#define JOYPAD_HANDLER (0x60)
 
 enum banking_types {
   MBC1,
@@ -57,7 +81,7 @@ class Cpu {
   bool ram_enabled;
   unsigned char ram_banks[0x8000]; // a ram bank is 0x2000 in size and there are 4 max
   std::function<void()> opcode_table[256];
-  std::function<void()> cb_table[256];
+  std::function<void()> prefix_table[256];
 
 
   // first letter is high and second is low
@@ -75,6 +99,7 @@ class Cpu {
   bool ime; // ime (interrupt) flag
   bool set_ime; // set by the EI instruction
   bool is_last_instr_ei;
+  bool is_prefix; // set by prefix instruction opcode 0xCB
 
 
   void handle_banking(unsigned short address, unsigned char data);
@@ -91,7 +116,17 @@ class Cpu {
   unsigned short next16();
   void set_flag(int, bool);
   bool get_flag(int);
-  void fetch_and_execute();
+  void request_interrupt(uint8_t bit);
+  void service_interrupt();
+
+  // timer handling
+  void update_timers(uint8_t);
+  uint16_t div_cycles;
+  uint16_t tima_cycles;
+  // uint8_t div;
+  // uint8_t tima;
+  // uint8_t tma;
+  // uint8_t tac;
   
   // load instructions
   void ld_r8_r8(REGISTER, REGISTER);
@@ -237,6 +272,7 @@ public:
   Cpu(char *rom_path);
   ~Cpu();
   void update();
+  uint8_t fetch_and_execute();
 };
 
 #endif

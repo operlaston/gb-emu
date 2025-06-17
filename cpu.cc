@@ -13,6 +13,7 @@ Cpu::Cpu(char *rom_path) {
   HL.reg = 0x014D;
   ime = 0;
   set_ime = false;
+  is_prefix = false;
 
   // set special rom registers
   mem[0xFF05] = 0x00;
@@ -125,9 +126,14 @@ Cpu::Cpu(char *rom_path) {
 
   ram_enabled = false;
 
+  // copy rom into memory
+  for (unsigned long i = 0; i < sizeof(mem); i++) {
+    mem[i] = rom[i];
+  }
+
   // miscellaneous instructions
   opcode_table[0x0] = [this](){ nop(); };
-  opcode_table[0xCB] = [this](){ };// execute prefixed instruction next //TODO
+  opcode_table[0xCB] = [this](){ is_prefix = true; };
   opcode_table[0x10] = [this](){ stop(); };
   opcode_table[0x27] = [this](){ daa(); };
 
@@ -197,7 +203,7 @@ Cpu::Cpu(char *rom_path) {
   opcode_table[0xF] = [this](){ rrca(); };
   opcode_table[0x1F] = [this](){ rra(); };
 
-  // bit flag instructions
+  // bit flag instructions are all prefixed
 
   // bitwise logic instructions
   opcode_table[0x2F] = [this](){ cpl(); };
@@ -408,14 +414,280 @@ Cpu::Cpu(char *rom_path) {
   opcode_table[0xFA] = [this](){ ld_a_n16(); };
 
 
-  // Instruction instruction_table[256] = {
-  //
-  // };
-  //
-  // // instructions prefixed with cb
-  // Instruction cb_table[256] = {
-  //
-  // };
+  // prefixed instructions
+  prefix_table[0x0] = [this](){ rlc_r8(REG_B); };
+  prefix_table[0x1] = [this](){ rlc_r8(REG_C); };
+  prefix_table[0x2] = [this](){ rlc_r8(REG_D); };
+  prefix_table[0x3] = [this](){ rlc_r8(REG_E); };
+  prefix_table[0x4] = [this](){ rlc_r8(REG_H); };
+  prefix_table[0x5] = [this](){ rlc_r8(REG_L); };
+  prefix_table[0x6] = [this](){ rlc_hl(); };
+  prefix_table[0x7] = [this](){ rlc_r8(REG_A); };
+  prefix_table[0x8] = [this](){ rrc_r8(REG_B); };
+  prefix_table[0x9] = [this](){ rrc_r8(REG_C); };
+  prefix_table[0xA] = [this](){ rrc_r8(REG_D); };
+  prefix_table[0xB] = [this](){ rrc_r8(REG_E); };
+  prefix_table[0xC] = [this](){ rrc_r8(REG_H); };
+  prefix_table[0xD] = [this](){ rrc_r8(REG_L); };
+  prefix_table[0xE] = [this](){ rrc_hl(); };
+  prefix_table[0xF] = [this](){ rrc_r8(REG_A); };
+
+  prefix_table[0x10] = [this](){ rl_r8(REG_B); };
+  prefix_table[0x11] = [this](){ rl_r8(REG_C); };
+  prefix_table[0x12] = [this](){ rl_r8(REG_D); };
+  prefix_table[0x13] = [this](){ rl_r8(REG_E); };
+  prefix_table[0x14] = [this](){ rl_r8(REG_H); };
+  prefix_table[0x15] = [this](){ rl_r8(REG_L); };
+  prefix_table[0x16] = [this](){ rl_hl(); };
+  prefix_table[0x17] = [this](){ rl_r8(REG_A); };
+  prefix_table[0x18] = [this](){ rr_r8(REG_B); };
+  prefix_table[0x19] = [this](){ rr_r8(REG_C); };
+  prefix_table[0x1A] = [this](){ rr_r8(REG_D); };
+  prefix_table[0x1B] = [this](){ rr_r8(REG_E); };
+  prefix_table[0x1C] = [this](){ rr_r8(REG_H); };
+  prefix_table[0x1D] = [this](){ rr_r8(REG_L); };
+  prefix_table[0x1E] = [this](){ rr_hl(); };
+  prefix_table[0x1F] = [this](){ rr_r8(REG_A); };
+
+  prefix_table[0x20] = [this](){ sla_r8(REG_B); };
+  prefix_table[0x21] = [this](){ sla_r8(REG_C); };
+  prefix_table[0x22] = [this](){ sla_r8(REG_D); };
+  prefix_table[0x23] = [this](){ sla_r8(REG_E); };
+  prefix_table[0x24] = [this](){ sla_r8(REG_H); };
+  prefix_table[0x25] = [this](){ sla_r8(REG_L); };
+  prefix_table[0x26] = [this](){ sla_hl(); };
+  prefix_table[0x27] = [this](){ sla_r8(REG_A); };
+  prefix_table[0x28] = [this](){ sra_r8(REG_B); };
+  prefix_table[0x29] = [this](){ sra_r8(REG_C); };
+  prefix_table[0x2A] = [this](){ sra_r8(REG_D); };
+  prefix_table[0x2B] = [this](){ sra_r8(REG_E); };
+  prefix_table[0x2C] = [this](){ sra_r8(REG_H); };
+  prefix_table[0x2D] = [this](){ sra_r8(REG_L); };
+  prefix_table[0x2E] = [this](){ sra_hl(); };
+  prefix_table[0x2F] = [this](){ sra_r8(REG_A); };
+
+  prefix_table[0x30] = [this](){ swap_r8(REG_B); };
+  prefix_table[0x31] = [this](){ swap_r8(REG_C); };
+  prefix_table[0x32] = [this](){ swap_r8(REG_D); };
+  prefix_table[0x33] = [this](){ swap_r8(REG_E); };
+  prefix_table[0x34] = [this](){ swap_r8(REG_H); };
+  prefix_table[0x35] = [this](){ swap_r8(REG_L); };
+  prefix_table[0x36] = [this](){ swap_hl(); };
+  prefix_table[0x37] = [this](){ swap_r8(REG_A); };
+  prefix_table[0x38] = [this](){ srl_r8(REG_B); };
+  prefix_table[0x39] = [this](){ srl_r8(REG_C); };
+  prefix_table[0x3A] = [this](){ srl_r8(REG_D); };
+  prefix_table[0x3B] = [this](){ srl_r8(REG_E); };
+  prefix_table[0x3C] = [this](){ srl_r8(REG_H); };
+  prefix_table[0x3D] = [this](){ srl_r8(REG_L); };
+  prefix_table[0x3E] = [this](){ srl_hl(); };
+  prefix_table[0x3F] = [this](){ srl_r8(REG_A); };
+
+  prefix_table[0x40] = [this](){ bit_u3_r8(0, REG_B); };
+  prefix_table[0x41] = [this](){ bit_u3_r8(0, REG_C); };
+  prefix_table[0x42] = [this](){ bit_u3_r8(0, REG_D); };
+  prefix_table[0x43] = [this](){ bit_u3_r8(0, REG_E); };
+  prefix_table[0x44] = [this](){ bit_u3_r8(0, REG_H); };
+  prefix_table[0x45] = [this](){ bit_u3_r8(0, REG_L); };
+  prefix_table[0x46] = [this](){ bit_u3_hl(0); };
+  prefix_table[0x47] = [this](){ bit_u3_r8(0, REG_A); };
+  prefix_table[0x48] = [this](){ bit_u3_r8(1, REG_B); };
+  prefix_table[0x49] = [this](){ bit_u3_r8(1, REG_C); };
+  prefix_table[0x4A] = [this](){ bit_u3_r8(1, REG_D); };
+  prefix_table[0x4B] = [this](){ bit_u3_r8(1, REG_E); };
+  prefix_table[0x4C] = [this](){ bit_u3_r8(1, REG_H); };
+  prefix_table[0x4D] = [this](){ bit_u3_r8(1, REG_L); };
+  prefix_table[0x4E] = [this](){ bit_u3_hl(1); };
+  prefix_table[0x4F] = [this](){ bit_u3_r8(1, REG_A); };
+
+  prefix_table[0x50] = [this](){ bit_u3_r8(2, REG_B); };
+  prefix_table[0x51] = [this](){ bit_u3_r8(2, REG_C); };
+  prefix_table[0x52] = [this](){ bit_u3_r8(2, REG_D); };
+  prefix_table[0x53] = [this](){ bit_u3_r8(2, REG_E); };
+  prefix_table[0x54] = [this](){ bit_u3_r8(2, REG_H); };
+  prefix_table[0x55] = [this](){ bit_u3_r8(2, REG_L); };
+  prefix_table[0x56] = [this](){ bit_u3_hl(2); };
+  prefix_table[0x57] = [this](){ bit_u3_r8(2, REG_A); };
+  prefix_table[0x58] = [this](){ bit_u3_r8(3, REG_B); };
+  prefix_table[0x59] = [this](){ bit_u3_r8(3, REG_C); };
+  prefix_table[0x5A] = [this](){ bit_u3_r8(3, REG_D); };
+  prefix_table[0x5B] = [this](){ bit_u3_r8(3, REG_E); };
+  prefix_table[0x5C] = [this](){ bit_u3_r8(3, REG_H); };
+  prefix_table[0x5D] = [this](){ bit_u3_r8(3, REG_L); };
+  prefix_table[0x5E] = [this](){ bit_u3_hl(3); };
+  prefix_table[0x5F] = [this](){ bit_u3_r8(3, REG_A); };
+
+  prefix_table[0x60] = [this](){ bit_u3_r8(4, REG_B); };
+  prefix_table[0x61] = [this](){ bit_u3_r8(4, REG_C); };
+  prefix_table[0x62] = [this](){ bit_u3_r8(4, REG_D); };
+  prefix_table[0x63] = [this](){ bit_u3_r8(4, REG_E); };
+  prefix_table[0x64] = [this](){ bit_u3_r8(4, REG_H); };
+  prefix_table[0x65] = [this](){ bit_u3_r8(4, REG_L); };
+  prefix_table[0x66] = [this](){ bit_u3_hl(4); };
+  prefix_table[0x67] = [this](){ bit_u3_r8(4, REG_A); };
+  prefix_table[0x68] = [this](){ bit_u3_r8(5, REG_B); };
+  prefix_table[0x69] = [this](){ bit_u3_r8(5, REG_C); };
+  prefix_table[0x6A] = [this](){ bit_u3_r8(5, REG_D); };
+  prefix_table[0x6B] = [this](){ bit_u3_r8(5, REG_E); };
+  prefix_table[0x6C] = [this](){ bit_u3_r8(5, REG_H); };
+  prefix_table[0x6D] = [this](){ bit_u3_r8(5, REG_L); };
+  prefix_table[0x6E] = [this](){ bit_u3_hl(5); };
+  prefix_table[0x6F] = [this](){ bit_u3_r8(5, REG_A); };
+
+  prefix_table[0x70] = [this](){ bit_u3_r8(6, REG_B); };
+  prefix_table[0x71] = [this](){ bit_u3_r8(6, REG_C); };
+  prefix_table[0x72] = [this](){ bit_u3_r8(6, REG_D); };
+  prefix_table[0x73] = [this](){ bit_u3_r8(6, REG_E); };
+  prefix_table[0x74] = [this](){ bit_u3_r8(6, REG_H); };
+  prefix_table[0x75] = [this](){ bit_u3_r8(6, REG_L); };
+  prefix_table[0x76] = [this](){ bit_u3_hl(6); };
+  prefix_table[0x77] = [this](){ bit_u3_r8(6, REG_A); };
+  prefix_table[0x78] = [this](){ bit_u3_r8(7, REG_B); };
+  prefix_table[0x79] = [this](){ bit_u3_r8(7, REG_C); };
+  prefix_table[0x7A] = [this](){ bit_u3_r8(7, REG_D); };
+  prefix_table[0x7B] = [this](){ bit_u3_r8(7, REG_E); };
+  prefix_table[0x7C] = [this](){ bit_u3_r8(7, REG_H); };
+  prefix_table[0x7D] = [this](){ bit_u3_r8(7, REG_L); };
+  prefix_table[0x7E] = [this](){ bit_u3_hl(7); };
+  prefix_table[0x7F] = [this](){ bit_u3_r8(7, REG_A); };
+
+  prefix_table[0x80] = [this](){ res_u3_r8(0, REG_B); };
+  prefix_table[0x81] = [this](){ res_u3_r8(0, REG_C); };
+  prefix_table[0x82] = [this](){ res_u3_r8(0, REG_D); };
+  prefix_table[0x83] = [this](){ res_u3_r8(0, REG_E); };
+  prefix_table[0x84] = [this](){ res_u3_r8(0, REG_H); };
+  prefix_table[0x85] = [this](){ res_u3_r8(0, REG_L); };
+  prefix_table[0x86] = [this](){ res_u3_hl(0); };
+  prefix_table[0x87] = [this](){ res_u3_r8(0, REG_A); };
+  prefix_table[0x88] = [this](){ res_u3_r8(1, REG_B); };
+  prefix_table[0x89] = [this](){ res_u3_r8(1, REG_C); };
+  prefix_table[0x8A] = [this](){ res_u3_r8(1, REG_D); };
+  prefix_table[0x8B] = [this](){ res_u3_r8(1, REG_E); };
+  prefix_table[0x8C] = [this](){ res_u3_r8(1, REG_H); };
+  prefix_table[0x8D] = [this](){ res_u3_r8(1, REG_L); };
+  prefix_table[0x8E] = [this](){ res_u3_hl(1); };
+  prefix_table[0x8F] = [this](){ res_u3_r8(1, REG_A); };
+
+  prefix_table[0x90] = [this](){ res_u3_r8(2, REG_B); };
+  prefix_table[0x91] = [this](){ res_u3_r8(2, REG_C); };
+  prefix_table[0x92] = [this](){ res_u3_r8(2, REG_D); };
+  prefix_table[0x93] = [this](){ res_u3_r8(2, REG_E); };
+  prefix_table[0x94] = [this](){ res_u3_r8(2, REG_H); };
+  prefix_table[0x95] = [this](){ res_u3_r8(2, REG_L); };
+  prefix_table[0x96] = [this](){ res_u3_hl(2); };
+  prefix_table[0x97] = [this](){ res_u3_r8(2, REG_A); };
+  prefix_table[0x98] = [this](){ res_u3_r8(3, REG_B); };
+  prefix_table[0x99] = [this](){ res_u3_r8(3, REG_C); };
+  prefix_table[0x9A] = [this](){ res_u3_r8(3, REG_D); };
+  prefix_table[0x9B] = [this](){ res_u3_r8(3, REG_E); };
+  prefix_table[0x9C] = [this](){ res_u3_r8(3, REG_H); };
+  prefix_table[0x9D] = [this](){ res_u3_r8(3, REG_L); };
+  prefix_table[0x9E] = [this](){ res_u3_hl(3); };
+  prefix_table[0x9F] = [this](){ res_u3_r8(3, REG_A); };
+
+  prefix_table[0xA0] = [this](){ res_u3_r8(4, REG_B); };
+  prefix_table[0xA1] = [this](){ res_u3_r8(4, REG_C); };
+  prefix_table[0xA2] = [this](){ res_u3_r8(4, REG_D); };
+  prefix_table[0xA3] = [this](){ res_u3_r8(4, REG_E); };
+  prefix_table[0xA4] = [this](){ res_u3_r8(4, REG_H); };
+  prefix_table[0xA5] = [this](){ res_u3_r8(4, REG_L); };
+  prefix_table[0xA6] = [this](){ res_u3_hl(4); };
+  prefix_table[0xA7] = [this](){ res_u3_r8(4, REG_A); };
+  prefix_table[0xA8] = [this](){ res_u3_r8(5, REG_B); };
+  prefix_table[0xA9] = [this](){ res_u3_r8(5, REG_C); };
+  prefix_table[0xAA] = [this](){ res_u3_r8(5, REG_D); };
+  prefix_table[0xAB] = [this](){ res_u3_r8(5, REG_E); };
+  prefix_table[0xAC] = [this](){ res_u3_r8(5, REG_H); };
+  prefix_table[0xAD] = [this](){ res_u3_r8(5, REG_L); };
+  prefix_table[0xAE] = [this](){ res_u3_hl(5); };
+  prefix_table[0xAF] = [this](){ res_u3_r8(5, REG_A); };
+
+  prefix_table[0xB0] = [this](){ res_u3_r8(6, REG_B); };
+  prefix_table[0xB1] = [this](){ res_u3_r8(6, REG_C); };
+  prefix_table[0xB2] = [this](){ res_u3_r8(6, REG_D); };
+  prefix_table[0xB3] = [this](){ res_u3_r8(6, REG_E); };
+  prefix_table[0xB4] = [this](){ res_u3_r8(6, REG_H); };
+  prefix_table[0xB5] = [this](){ res_u3_r8(6, REG_L); };
+  prefix_table[0xB6] = [this](){ res_u3_hl(6); };
+  prefix_table[0xB7] = [this](){ res_u3_r8(6, REG_A); };
+  prefix_table[0xB8] = [this](){ res_u3_r8(7, REG_B); };
+  prefix_table[0xB9] = [this](){ res_u3_r8(7, REG_C); };
+  prefix_table[0xBA] = [this](){ res_u3_r8(7, REG_D); };
+  prefix_table[0xBB] = [this](){ res_u3_r8(7, REG_E); };
+  prefix_table[0xBC] = [this](){ res_u3_r8(7, REG_H); };
+  prefix_table[0xBD] = [this](){ res_u3_r8(7, REG_L); };
+  prefix_table[0xBE] = [this](){ res_u3_hl(7); };
+  prefix_table[0xBF] = [this](){ res_u3_r8(7, REG_A); };
+
+  prefix_table[0xC0] = [this](){ set_u3_r8(0, REG_B); };
+  prefix_table[0xC1] = [this](){ set_u3_r8(0, REG_C); };
+  prefix_table[0xC2] = [this](){ set_u3_r8(0, REG_D); };
+  prefix_table[0xC3] = [this](){ set_u3_r8(0, REG_E); };
+  prefix_table[0xC4] = [this](){ set_u3_r8(0, REG_H); };
+  prefix_table[0xC5] = [this](){ set_u3_r8(0, REG_L); };
+  prefix_table[0xC6] = [this](){ set_u3_hl(0); };
+  prefix_table[0xC7] = [this](){ set_u3_r8(0, REG_A); };
+  prefix_table[0xC8] = [this](){ set_u3_r8(1, REG_B); };
+  prefix_table[0xC9] = [this](){ set_u3_r8(1, REG_C); };
+  prefix_table[0xCA] = [this](){ set_u3_r8(1, REG_D); };
+  prefix_table[0xCB] = [this](){ set_u3_r8(1, REG_E); };
+  prefix_table[0xCC] = [this](){ set_u3_r8(1, REG_H); };
+  prefix_table[0xCD] = [this](){ set_u3_r8(1, REG_L); };
+  prefix_table[0xCE] = [this](){ set_u3_hl(1); };
+  prefix_table[0xCF] = [this](){ set_u3_r8(1, REG_A); };
+
+  prefix_table[0xD0] = [this](){ set_u3_r8(2, REG_B); };
+  prefix_table[0xD1] = [this](){ set_u3_r8(2, REG_C); };
+  prefix_table[0xD2] = [this](){ set_u3_r8(2, REG_D); };
+  prefix_table[0xD3] = [this](){ set_u3_r8(2, REG_E); };
+  prefix_table[0xD4] = [this](){ set_u3_r8(2, REG_H); };
+  prefix_table[0xD5] = [this](){ set_u3_r8(2, REG_L); };
+  prefix_table[0xD6] = [this](){ set_u3_hl(2); };
+  prefix_table[0xD7] = [this](){ set_u3_r8(2, REG_A); };
+  prefix_table[0xD8] = [this](){ set_u3_r8(3, REG_B); };
+  prefix_table[0xD9] = [this](){ set_u3_r8(3, REG_C); };
+  prefix_table[0xDA] = [this](){ set_u3_r8(3, REG_D); };
+  prefix_table[0xDB] = [this](){ set_u3_r8(3, REG_E); };
+  prefix_table[0xDC] = [this](){ set_u3_r8(3, REG_H); };
+  prefix_table[0xDD] = [this](){ set_u3_r8(3, REG_L); };
+  prefix_table[0xDE] = [this](){ set_u3_hl(3); };
+  prefix_table[0xDF] = [this](){ set_u3_r8(3, REG_A); };
+
+  prefix_table[0xE0] = [this](){ set_u3_r8(4, REG_B); };
+  prefix_table[0xE1] = [this](){ set_u3_r8(4, REG_C); };
+  prefix_table[0xE2] = [this](){ set_u3_r8(4, REG_D); };
+  prefix_table[0xE3] = [this](){ set_u3_r8(4, REG_E); };
+  prefix_table[0xE4] = [this](){ set_u3_r8(4, REG_H); };
+  prefix_table[0xE5] = [this](){ set_u3_r8(4, REG_L); };
+  prefix_table[0xE6] = [this](){ set_u3_hl(4); };
+  prefix_table[0xE7] = [this](){ set_u3_r8(4, REG_A); };
+  prefix_table[0xE8] = [this](){ set_u3_r8(5, REG_B); };
+  prefix_table[0xE9] = [this](){ set_u3_r8(5, REG_C); };
+  prefix_table[0xEA] = [this](){ set_u3_r8(5, REG_D); };
+  prefix_table[0xEB] = [this](){ set_u3_r8(5, REG_E); };
+  prefix_table[0xEC] = [this](){ set_u3_r8(5, REG_H); };
+  prefix_table[0xED] = [this](){ set_u3_r8(5, REG_L); };
+  prefix_table[0xEE] = [this](){ set_u3_hl(5); };
+  prefix_table[0xEF] = [this](){ set_u3_r8(5, REG_A); };
+
+  prefix_table[0xF0] = [this](){ set_u3_r8(6, REG_B); };
+  prefix_table[0xF1] = [this](){ set_u3_r8(6, REG_C); };
+  prefix_table[0xF2] = [this](){ set_u3_r8(6, REG_D); };
+  prefix_table[0xF3] = [this](){ set_u3_r8(6, REG_E); };
+  prefix_table[0xF4] = [this](){ set_u3_r8(6, REG_H); };
+  prefix_table[0xF5] = [this](){ set_u3_r8(6, REG_L); };
+  prefix_table[0xF6] = [this](){ set_u3_hl(6); };
+  prefix_table[0xF7] = [this](){ set_u3_r8(6, REG_A); };
+  prefix_table[0xF8] = [this](){ set_u3_r8(7, REG_B); };
+  prefix_table[0xF9] = [this](){ set_u3_r8(7, REG_C); };
+  prefix_table[0xFA] = [this](){ set_u3_r8(7, REG_D); };
+  prefix_table[0xFB] = [this](){ set_u3_r8(7, REG_E); };
+  prefix_table[0xFC] = [this](){ set_u3_r8(7, REG_H); };
+  prefix_table[0xFD] = [this](){ set_u3_r8(7, REG_L); };
+  prefix_table[0xFE] = [this](){ set_u3_hl(7); };
+  prefix_table[0xFF] = [this](){ set_u3_r8(7, REG_A); };
+
+  cout << "set up instruction tables and initialized memory" << endl;
 }
 
 Cpu::~Cpu() {
@@ -446,6 +718,14 @@ unsigned short Cpu::read_word(unsigned short address) const {
 }
 
 void Cpu::write_byte(unsigned short address, unsigned char data) {
+  // remove later
+  if (address == 0xFF02) {
+    uint8_t c = read_byte(0xFF01);
+    printf("%c", c);
+    fflush(stdout);
+    data &= ~0x80;
+  }
+
   // 0x0000-0x7FFF is read only
   if (address < 0x8000) {
     handle_banking(address, data);
@@ -463,8 +743,9 @@ void Cpu::write_byte(unsigned short address, unsigned char data) {
     return;
   }
 
-  else if (address == 0xFF04) { // DIV register (timer)
-    mem[0xFF04] = 0;
+  else if (address == DIV_REG) { // 0xFF04 (timer)
+    // writing anything to this register resets it to 0
+    mem[DIV_REG] = 0;
   }
 
   else {
@@ -565,23 +846,126 @@ bool Cpu::get_flag(int flagbit) {
   return read_r8(REG_F) & mask;
 }
 
+void Cpu::request_interrupt(uint8_t bit) {
+  // IE (interrupt enable): 0xFFFF
+  // IF (interrupt flag/requested): 0xFF0F
+
+  //TODO
+  write_byte(IF_REG, read_byte(IF_REG) | (1 << bit));
+}
+
+void Cpu::service_interrupt() {
+  // IE (interrupt enable): 0xFFFF
+  // IF (interrupt flag/requested): 0xFF0F
+
+  //TODO
+  if (!ime) {
+    return;
+  }
+
+  uint16_t interrupt_address = 0;
+  uint8_t interrupt_type = 0;
+  uint8_t if_reg = read_byte(IF_REG);
+  for(int i = 0; i < 5; i++) {
+    uint8_t bitmask = 1;
+    bitmask <<= i;
+    if (if_reg & bitmask) {
+      interrupt_type = i;
+      switch(i) {
+        case VBLANK_INTER:
+          interrupt_address = VBLANK_HANDLER;
+          break;
+        case LCD_INTER:
+          interrupt_address = LCD_HANDLER;
+          break;
+        case TIMER_INTER:
+          interrupt_address = TIMER_HANDLER;
+          break;
+        case SERIAL_INTER:
+          interrupt_address = SERIAL_HANDLER;
+          break;
+        case JOYPAD_INTER:
+          interrupt_address = JOYPAD_HANDLER;
+          break;
+      }
+      break;
+    }
+  }
+
+  if (interrupt_address == 0) return;
+  write_byte(--sp, pc >> 8);
+  write_byte(--sp, pc & 0xFF);
+  
+  pc = interrupt_address;
+  uint8_t mask = 1 << interrupt_type;
+  write_byte(IF_REG, if_reg | mask);
+}
+
+void Cpu::update_timers(uint8_t cycles) {
+  div_cycles += cycles;
+  while (div_cycles >= 0xFF) {
+    mem[DIV_REG]++;
+    div_cycles -= 0xFF;
+  }
+
+  uint8_t tac = read_byte(TAC_REG) & 0x3;
+  if (!(tac & 0x4)) { // clock is disabled
+    // tima_cycles = 0;
+    return;
+  }
+  uint8_t tima = read_byte(TIMA_REG);
+  uint32_t max_tima_cycles = 1024; // 4096 hz where tac == 0
+  if (tac == 1) {
+    // 262144 hz or increment every 16 cycles
+    max_tima_cycles = 16;
+  }
+  else if (tac == 2) {
+    // 65536 hz or increment every 64 cycles
+    max_tima_cycles = 64;
+  }
+  else {
+    // 16384 hz of increment every 256 cycles
+    max_tima_cycles = 256;
+  }
+  tima_cycles += cycles;
+  while (tima_cycles >= max_tima_cycles) {
+    tima_cycles -= max_tima_cycles;
+    if (tima == 0xFF) {
+      write_byte(TIMA_REG, read_byte(TMA_REG));
+      request_interrupt(TIMER_INTER);
+    }
+    else {
+      write_byte(TIMA_REG, tima + 1);
+    }
+  }
+}
+
 void Cpu::update() {
   // max cycles per frame (60 frames per second)
   const int CYCLES_PER_FRAME = CYCLES_PER_SECOND / 60;
   int cycles_this_update = 0;
   while (cycles_this_update < CYCLES_PER_FRAME) {
     // perform a cycle
+    uint8_t cycles = fetch_and_execute();
+    cycles_this_update += cycles;
     // update timers
+    update_timers(cycles);
     // update graphics
     // do interrupts
+    service_interrupt();
   }
   // render the screen
 }
 
-void Cpu::fetch_and_execute() {
+uint8_t Cpu::fetch_and_execute() {
   unsigned char opcode = read_byte(pc);
   pc++;
   auto& opcode_function = opcode_table[opcode];
+  if (is_prefix) {
+    opcode_function = prefix_table[opcode];
+    is_prefix = false;
+  }
+  
   if (opcode_function) {
     opcode_function();
     if (is_last_instr_ei) {
@@ -597,6 +981,7 @@ void Cpu::fetch_and_execute() {
     cout << "unknown opcode detected. exiting now..." << endl;
     exit(1);
   }
+  return 4; // TBD
 }
 
 // it is up to the caller to know whether the register

@@ -1,5 +1,5 @@
 CC = g++
-CCFLAGS = -g -Wall -Wextra -std=c++17 -O2
+CCFLAGS = -g -Wall -Wextra -std=c++17
 OBJ = cpu.o main.o
 TARGET = gameboy
 
