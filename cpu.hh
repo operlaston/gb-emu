@@ -65,12 +65,18 @@ typedef enum {
 // } Instruction;
 
 union reg_t{
-  unsigned char second;
-  unsigned char first;
   unsigned short reg;
+  struct {
+    unsigned char second;
+    unsigned char first;
+  };
 };
 
 class Cpu { 
+  // remove later
+  unsigned int total_instructions = 0;
+
+
   unsigned char mem[0x10000];
   unsigned char rom[0x200000];
   unsigned char num_rom_banks; // rom banks are 16KiB in size

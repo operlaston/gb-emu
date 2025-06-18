@@ -1,5 +1,6 @@
 #include "cpu.hh"
 #include <cstdint>
+#include <cstring>
 #include <pthread.h>
 using namespace std;
 
@@ -131,9 +132,12 @@ Cpu::Cpu(char *rom_path) {
     mem[i] = rom[i];
   }
 
+  // ensure opcodes without an instruction are set to 0
+  memset(opcode_table, 0, sizeof(opcode_table));
+  memset(prefix_table, 0, sizeof(prefix_table));
+
   // miscellaneous instructions
   opcode_table[0x0] = [this](){ nop(); };
-  opcode_table[0xCB] = [this](){ is_prefix = true; };
   opcode_table[0x10] = [this](){ stop(); };
   opcode_table[0x27] = [this](){ daa(); };
 
@@ -190,7 +194,7 @@ Cpu::Cpu(char *rom_path) {
   opcode_table[0xCA] = [this](){ jp_cc_n16(FLAG_Z, true); };
   opcode_table[0xDA] = [this](){ jp_cc_n16(FLAG_C, true); };
   opcode_table[0xCC] = [this](){ call_cc_n16(FLAG_Z, true); };
-  opcode_table[0xDC] = [this](){ call_cc_n16(FLAG_Z, true); };
+  opcode_table[0xDC] = [this](){ call_cc_n16(FLAG_C, true); };
   opcode_table[0xCD] = [this](){ call_n16(); };
   opcode_table[0xCF] = [this](){ rst_vec(0x08); };
   opcode_table[0xDF] = [this](){ rst_vec(0x18); };
@@ -687,7 +691,7 @@ Cpu::Cpu(char *rom_path) {
   prefix_table[0xFE] = [this](){ set_u3_hl(7); };
   prefix_table[0xFF] = [this](){ set_u3_r8(7, REG_A); };
 
-  cout << "set up instruction tables and initialized memory" << endl;
+  //cout << "set up instruction tables and initialized memory" << endl;
 }
 
 Cpu::~Cpu() {
@@ -706,6 +710,11 @@ unsigned char Cpu::read_byte(unsigned short address) const {
     unsigned short offset = address - 0xA000;
     return ram_banks[offset + (curr_ram_bank * 0x2000)];
   }
+
+  // for debugging purposes remove later
+  else if (address == 0xFF44) {
+    return 0x90;
+  }
   
   return mem[address];
 }
@@ -720,7 +729,7 @@ unsigned short Cpu::read_word(unsigned short address) const {
 void Cpu::write_byte(unsigned short address, unsigned char data) {
   // remove later
   if (address == 0xFF02) {
-    uint8_t c = read_byte(0xFF01);
+    char c = read_byte(0xFF01);
     printf("%c", c);
     fflush(stdout);
     data &= ~0x80;
@@ -830,14 +839,16 @@ unsigned short Cpu::next16() {
 void Cpu::set_flag(int flagbit, bool set) {
   // create the bit mask using bit shift
   unsigned char mask = 1 << flagbit;
-  unsigned char *flag_reg = find_r8(REG_F);
+  // unsigned char *flag_reg = find_r8(REG_F);
   // if we want to disable the bit, flip the mask and use bitwise &
   if (!set) {
-    *flag_reg = *flag_reg & ~mask;
+    // *flag_reg = *flag_reg & ~mask;
+    AF.second &= ~mask;
   }
   // if we want to set the bit, bitwise |
   else {
-    *flag_reg = *flag_reg | mask;
+    // *flag_reg = *flag_reg | mask;
+    AF.second |= mask;
   }
 }
 
@@ -898,7 +909,7 @@ void Cpu::service_interrupt() {
   
   pc = interrupt_address;
   uint8_t mask = 1 << interrupt_type;
-  write_byte(IF_REG, if_reg | mask);
+  write_byte(IF_REG, if_reg & ~mask);
 }
 
 void Cpu::update_timers(uint8_t cycles) {
@@ -958,16 +969,35 @@ void Cpu::update() {
 }
 
 uint8_t Cpu::fetch_and_execute() {
+  // print registers (debugging)
+  // if (total_instructions >= 223892) exit(1);
+  // printf("A: %02X ", AF.first);
+  // printf("F: %02X ", AF.second);
+  // printf("B: %02X ", BC.first);
+  // printf("C: %02X ", BC.second);
+  // printf("D: %02X ", DE.first);
+  // printf("E: %02X ", DE.second);
+  // printf("H: %02X ", HL.first);
+  // printf("L: %02X ", HL.second);
+  // printf("SP: %04X ", sp);
+  // printf("PC: 00:%04X ", pc);
+  // printf("(%02X %02X %02X %02X)\n", mem[pc], mem[pc + 1], mem[pc + 2], mem[pc + 3]);
+  // total_instructions++;
+
+
   unsigned char opcode = read_byte(pc);
   pc++;
   auto& opcode_function = opcode_table[opcode];
-  if (is_prefix) {
+  // handle 0xCB (prefix instruction); execute prefixed instruction immediately
+  if (opcode == 0xCB) {
+    opcode = read_byte(pc);
+    pc++;
     opcode_function = prefix_table[opcode];
-    is_prefix = false;
   }
-  
+
   if (opcode_function) {
     opcode_function();
+    AF.second &= 0xF0;
     if (is_last_instr_ei) {
       is_last_instr_ei = false;
     }
@@ -1046,55 +1076,41 @@ unsigned short *Cpu::find_r16(REGISTER reg) {
 
 void Cpu::ld_r8_r8(REGISTER reg1, REGISTER reg2) {
   // copy reg2 into reg1
-  unsigned char *reg1_ptr = find_r8(reg1);
-  unsigned char *reg2_ptr = find_r8(reg2);
-  *reg1_ptr = *reg2_ptr;
+  write_r8(reg1, read_r8(reg2));
 }
 
 void Cpu::ld_r8_n8(REGISTER r8) {
   // copy n8 into r8 
-  unsigned short n8 = read_byte(pc);
-  pc++;
-  unsigned char *reg = find_r8(r8);
-  *reg = n8;
+  uint8_t n8 = next8();
+  write_r8(r8, n8);
 }
 
 void Cpu::ld_r16_n16(REGISTER r16) {
   // copy n16 into r16
-  // assumes little endian
-  unsigned short n16 = read_word(pc);
-  pc += 2;
-  unsigned short *reg = find_r16(r16);
-  *reg = n16;
+  uint16_t n16 = next16();
+  write_r16(r16, n16);
 }
 
 void Cpu::ld_hl_r8(REGISTER r8) {
   // copy the value in r8 into the byte pointed to by HL
-  unsigned short byte_loc = HL.reg;
-  write_byte(byte_loc, read_r8(r8));
+  unsigned short loc = HL.reg;
+  write_byte(loc, read_r8(r8));
 }
 
 void Cpu::ld_hl_n8() {
   // copy the value in n8 into the byte pointed to by HL
-  unsigned char n8 = read_byte(pc);
-  pc++;
-  unsigned short byte_loc = HL.reg;
-  write_byte(byte_loc, n8);
+  unsigned char n8 = next8();
+  write_byte(HL.reg, n8);
 }
 
 void Cpu::ld_r8_hl(REGISTER r8) {
   // copy the value pointed to by HL into r8
-  unsigned short byte_loc = HL.reg;
-  unsigned char byte_val = read_byte(byte_loc);
-  unsigned char *reg = find_r8(r8);
-  *reg = byte_val;
+  write_r8(r8, read_byte(HL.reg));
 }
 
 void Cpu::ld_r16_a(REGISTER r16) {
   // copy the value in register A into the byte pointed to by r16
-  unsigned char reg_a = AF.first;
-  unsigned short r16_loc = *find_r16(r16);
-  write_byte(r16_loc, reg_a);
+  write_byte(read_r16(r16), AF.first);
 }
 
 void Cpu::ld_n16_a() {
@@ -1109,8 +1125,7 @@ void Cpu::ldh_n8_a() {
   // provided the address is between 0xFF00 and 0xFFFF
   unsigned char loc = read_byte(pc);
   pc += 1;
-  loc = 0xFF00 + loc;
-  write_byte(loc, AF.first);
+  write_byte(0xFF00 + loc, AF.first);
 }
 
 void Cpu::ldh_c_a() {
@@ -1133,14 +1148,14 @@ void Cpu::ld_a_n16() {
 void Cpu::ldh_a_n8() {
   // load into register A the data from the address specified by 
   // n8 + 0xFF00
-  unsigned short n8 = next8();
+  unsigned char n8 = next8();
   write_r8(REG_A, read_byte(0xFF00 + n8));
 }
 
 void Cpu::ldh_a_c() {
   // copy the byte from address 0xFF00 + C into register A
-  unsigned char val = 0xFF00 + read_r8(REG_C);
-  write_r8(REG_A, val);
+  unsigned short val = 0xFF00 + read_r8(REG_C);
+  write_r8(REG_A, read_byte(val));
 }
 
 void Cpu::ld_hli_a() {
@@ -1170,7 +1185,7 @@ void Cpu::ld_a_hld() {
 void Cpu::ld_a_hli() {
   // copy byte pointed by HL into A and increment HL after
   write_r8(REG_A, read_byte(HL.reg));
-  HL.reg--;
+  HL.reg++;
 }
 
 
@@ -1700,6 +1715,9 @@ void Cpu::call_cc_n16(int flag, bool condition) {
   if (get_flag(flag) == condition) {
     call_n16();
   }
+  else {
+    pc += 2;
+  }
 }
 
 void Cpu::jp_hl() {
@@ -1715,6 +1733,9 @@ void Cpu::jp_cc_n16(int flag, bool condition) {
   if (get_flag(flag) == condition) {
     jp_n16();
   }
+  else {
+    pc += 2;
+  }
 }
 
 void Cpu::jr_e8() {
@@ -1725,6 +1746,9 @@ void Cpu::jr_e8() {
 void Cpu::jr_cc_e8(int flag, bool condition) {
   if( get_flag(flag) == condition ) {
     jr_e8();
+  }
+  else {
+    pc++;
   }
 }
 
@@ -1745,7 +1769,7 @@ void Cpu::reti() {
 }
 
 void Cpu::rst_vec(uint8_t n) {
-  uint16_t addr = n | 0x0000;
+  uint16_t addr = n | 0x0000; // extend to 2 bytes
   // pc is already at the next instruction
   write_byte(--sp, pc >> 8); // most significant byte
   write_byte(--sp, pc & 0xFF);
@@ -1855,8 +1879,9 @@ void Cpu::push_af() {
 
 void Cpu::push_r16(REGISTER r16) {
   uint16_t val = read_r16(r16);
-  uint8_t high = val & 0xFF00;
+  uint8_t high = val >> 8;
   uint8_t low = val & 0x00FF;
+
   write_byte(--sp, high);
   write_byte(--sp, low);
 }
