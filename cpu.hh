@@ -12,7 +12,8 @@
 #define FLAG_C (4) // carry flag
 
 // cpu cycles per second
-#define CYCLES_PER_SECOND (4194304)
+//#define CYCLES_PER_SECOND (4194304)
+#define CYCLES_PER_SECOND (1048576) // use m-cycles instead of t-cycles
 
 // timer registers (addresses in memory)
 #define DIV_REG (0xFF04) // div timer
@@ -59,6 +60,12 @@ typedef enum {
   REG_HL
 } REGISTER;
 
+typedef enum {
+  HALTED,
+  STOPPED,
+  RUNNING
+} CPU_STATE;
+
 // typedef struct {
 //   unsigned char operand_size;
 //   std::function<void()> execute_function;
@@ -73,9 +80,7 @@ union reg_t{
 };
 
 class Cpu { 
-  // remove later
-  unsigned int total_instructions = 0;
-
+  CPU_STATE state;
 
   unsigned char mem[0x10000];
   unsigned char rom[0x200000];
@@ -106,6 +111,7 @@ class Cpu {
   bool set_ime; // set by the EI instruction
   bool is_last_instr_ei;
   bool is_prefix; // set by prefix instruction opcode 0xCB
+  uint8_t instr_cycles; // m-cycles of the last executed instruction
 
 
   void handle_banking(unsigned short address, unsigned char data);

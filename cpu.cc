@@ -6,6 +6,7 @@ using namespace std;
 
 Cpu::Cpu(char *rom_path) {
   // initialize program counter, stack pointer, registers
+  state = RUNNING;
   pc = 0x100;
   sp = 0xFFFE;
   AF.reg = 0x01B0;
@@ -15,6 +16,7 @@ Cpu::Cpu(char *rom_path) {
   ime = 0;
   set_ime = false;
   is_prefix = false;
+  instr_cycles = 0;
 
   // set special rom registers
   mem[0xFF05] = 0x00;
@@ -711,11 +713,6 @@ unsigned char Cpu::read_byte(unsigned short address) const {
     return ram_banks[offset + (curr_ram_bank * 0x2000)];
   }
 
-  // for debugging purposes remove later
-  else if (address == 0xFF44) {
-    return 0x90;
-  }
-  
   return mem[address];
 }
 
@@ -869,18 +866,22 @@ void Cpu::service_interrupt() {
   // IE (interrupt enable): 0xFFFF
   // IF (interrupt flag/requested): 0xFF0F
 
-  //TODO
+  uint8_t if_reg = read_byte(IF_REG);
+  uint8_t ief = if_reg & read_byte(IE_REG); // enabled and requested
+  if (ief && state == HALTED) {
+    state = RUNNING;
+  }
+
   if (!ime) {
     return;
   }
 
   uint16_t interrupt_address = 0;
   uint8_t interrupt_type = 0;
-  uint8_t if_reg = read_byte(IF_REG);
   for(int i = 0; i < 5; i++) {
     uint8_t bitmask = 1;
     bitmask <<= i;
-    if (if_reg & bitmask) {
+    if (ief & bitmask) {
       interrupt_type = i;
       switch(i) {
         case VBLANK_INTER:
@@ -919,24 +920,25 @@ void Cpu::update_timers(uint8_t cycles) {
     div_cycles -= 0xFF;
   }
 
-  uint8_t tac = read_byte(TAC_REG) & 0x3;
+  uint8_t tac = read_byte(TAC_REG);
   if (!(tac & 0x4)) { // clock is disabled
     // tima_cycles = 0;
     return;
   }
+  tac &= 0x3;
   uint8_t tima = read_byte(TIMA_REG);
-  uint32_t max_tima_cycles = 1024; // 4096 hz where tac == 0
+  uint32_t max_tima_cycles = 256; // tac == 0 (every 256 m-cycles)
   if (tac == 1) {
-    // 262144 hz or increment every 16 cycles
-    max_tima_cycles = 16;
+    // 262144 hz or increment every 4 m-cycles
+    max_tima_cycles = 4;
   }
   else if (tac == 2) {
-    // 65536 hz or increment every 64 cycles
-    max_tima_cycles = 64;
+    // 65536 hz or increment every 16 m-cycles
+    max_tima_cycles = 16;
   }
   else {
-    // 16384 hz of increment every 256 cycles
-    max_tima_cycles = 256;
+    // 16384 hz of increment every 64 m-cycles
+    max_tima_cycles = 64;
   }
   tima_cycles += cycles;
   while (tima_cycles >= max_tima_cycles) {
@@ -957,7 +959,9 @@ void Cpu::update() {
   int cycles_this_update = 0;
   while (cycles_this_update < CYCLES_PER_FRAME) {
     // perform a cycle
-    uint8_t cycles = fetch_and_execute();
+    uint8_t cycles = 0;
+    if (state == RUNNING) cycles = fetch_and_execute();
+    else if (state == HALTED) cycles = 1;
     cycles_this_update += cycles;
     // update timers
     update_timers(cycles);
@@ -969,22 +973,7 @@ void Cpu::update() {
 }
 
 uint8_t Cpu::fetch_and_execute() {
-  // print registers (debugging)
-  // if (total_instructions >= 223892) exit(1);
-  // printf("A: %02X ", AF.first);
-  // printf("F: %02X ", AF.second);
-  // printf("B: %02X ", BC.first);
-  // printf("C: %02X ", BC.second);
-  // printf("D: %02X ", DE.first);
-  // printf("E: %02X ", DE.second);
-  // printf("H: %02X ", HL.first);
-  // printf("L: %02X ", HL.second);
-  // printf("SP: %04X ", sp);
-  // printf("PC: 00:%04X ", pc);
-  // printf("(%02X %02X %02X %02X)\n", mem[pc], mem[pc + 1], mem[pc + 2], mem[pc + 3]);
-  // total_instructions++;
-
-
+  instr_cycles = 0;
   unsigned char opcode = read_byte(pc);
   pc++;
   auto& opcode_function = opcode_table[opcode];
@@ -1011,7 +1000,7 @@ uint8_t Cpu::fetch_and_execute() {
     cout << "unknown opcode detected. exiting now..." << endl;
     exit(1);
   }
-  return 4; // TBD
+  return instr_cycles; //
 }
 
 // it is up to the caller to know whether the register
@@ -1077,40 +1066,47 @@ unsigned short *Cpu::find_r16(REGISTER reg) {
 void Cpu::ld_r8_r8(REGISTER reg1, REGISTER reg2) {
   // copy reg2 into reg1
   write_r8(reg1, read_r8(reg2));
+  instr_cycles = 1;
 }
 
 void Cpu::ld_r8_n8(REGISTER r8) {
   // copy n8 into r8 
   uint8_t n8 = next8();
   write_r8(r8, n8);
+  instr_cycles = 2;
 }
 
 void Cpu::ld_r16_n16(REGISTER r16) {
   // copy n16 into r16
   uint16_t n16 = next16();
   write_r16(r16, n16);
+  instr_cycles = 3;
 }
 
 void Cpu::ld_hl_r8(REGISTER r8) {
   // copy the value in r8 into the byte pointed to by HL
   unsigned short loc = HL.reg;
   write_byte(loc, read_r8(r8));
+  instr_cycles = 2;
 }
 
 void Cpu::ld_hl_n8() {
   // copy the value in n8 into the byte pointed to by HL
   unsigned char n8 = next8();
   write_byte(HL.reg, n8);
+  instr_cycles = 3;
 }
 
 void Cpu::ld_r8_hl(REGISTER r8) {
   // copy the value pointed to by HL into r8
   write_r8(r8, read_byte(HL.reg));
+  instr_cycles = 2;
 }
 
 void Cpu::ld_r16_a(REGISTER r16) {
   // copy the value in register A into the byte pointed to by r16
   write_byte(read_r16(r16), AF.first);
+  instr_cycles = 2;
 }
 
 void Cpu::ld_n16_a() {
@@ -1118,6 +1114,7 @@ void Cpu::ld_n16_a() {
   unsigned short loc = read_word(pc);
   pc += 2;
   write_byte(loc, AF.first);
+  instr_cycles = 4;
 }
 
 void Cpu::ldh_n8_a() {
@@ -1126,11 +1123,13 @@ void Cpu::ldh_n8_a() {
   unsigned char loc = read_byte(pc);
   pc += 1;
   write_byte(0xFF00 + loc, AF.first);
+  instr_cycles = 3;
 }
 
 void Cpu::ldh_c_a() {
   // copy the value in register A into the byte at address 0xFF00 + C
   write_byte(0xFF00 + BC.second, AF.first);
+  instr_cycles = 2;
 }
 
 void Cpu::ld_a_r16(REGISTER r16) {
@@ -1138,11 +1137,13 @@ void Cpu::ld_a_r16(REGISTER r16) {
   unsigned short *reg = find_r16(r16);
   unsigned char val = read_byte(*reg);
   write_r8(REG_A, val);
+  instr_cycles = 2;
 }
 
 void Cpu::ld_a_n16() {
   unsigned short n16 = next16();
   write_r8(REG_A, read_byte(n16));
+  instr_cycles = 4;
 }
 
 void Cpu::ldh_a_n8() {
@@ -1150,12 +1151,14 @@ void Cpu::ldh_a_n8() {
   // n8 + 0xFF00
   unsigned char n8 = next8();
   write_r8(REG_A, read_byte(0xFF00 + n8));
+  instr_cycles = 3;
 }
 
 void Cpu::ldh_a_c() {
   // copy the byte from address 0xFF00 + C into register A
   unsigned short val = 0xFF00 + read_r8(REG_C);
   write_r8(REG_A, read_byte(val));
+  instr_cycles = 2;
 }
 
 void Cpu::ld_hli_a() {
@@ -1165,6 +1168,7 @@ void Cpu::ld_hli_a() {
   unsigned short loc = HL.reg;
   write_byte(loc, val);
   HL.reg++;
+  instr_cycles = 2;
 }
 
 void Cpu::ld_hld_a() {
@@ -1173,6 +1177,7 @@ void Cpu::ld_hld_a() {
   unsigned short loc = HL.reg;
   write_byte(loc, val);
   HL.reg--;
+  instr_cycles = 2;
 }
 
 void Cpu::ld_a_hld() {
@@ -1180,12 +1185,14 @@ void Cpu::ld_a_hld() {
   unsigned char val = read_byte(HL.reg);
   write_r8(REG_A, val);
   HL.reg--;
+  instr_cycles = 2;
 }
 
 void Cpu::ld_a_hli() {
   // copy byte pointed by HL into A and increment HL after
   write_r8(REG_A, read_byte(HL.reg));
   HL.reg++;
+  instr_cycles = 2;
 }
 
 
@@ -1208,14 +1215,17 @@ void Cpu::adc_a_helper(uint8_t val) {
 void Cpu::adc_a_r8(REGISTER r8) {
   // add the value in r8 plus the carry flag to A
   adc_a_helper(read_r8(r8));
+  instr_cycles = 1;
 }
 
 void Cpu::adc_a_hl() {
   adc_a_helper(read_byte(HL.reg));
+  instr_cycles = 2;
 }
 
 void Cpu::adc_a_n8() {
   adc_a_helper(next8());
+  instr_cycles = 2;
 }
 
 void Cpu::add_a_helper(uint8_t val) {
@@ -1230,14 +1240,17 @@ void Cpu::add_a_helper(uint8_t val) {
 
 void Cpu::add_a_r8(REGISTER r8) {
   add_a_helper(read_r8(r8));
+  instr_cycles = 1;
 }
 
 void Cpu::add_a_hl() {
   add_a_helper(read_byte(HL.reg));
+  instr_cycles = 2;
 }
 
 void Cpu::add_a_n8() {
   add_a_helper(next8());
+  instr_cycles = 2;
 }
 
 void Cpu::cp_a_helper(uint8_t val) {
@@ -1249,14 +1262,17 @@ void Cpu::cp_a_helper(uint8_t val) {
 
 void Cpu::cp_a_r8(REGISTER r8) {
   cp_a_helper(read_r8(r8));
+  instr_cycles = 1;
 }
 
 void Cpu::cp_a_hl() {
   cp_a_helper(read_byte(HL.reg));
+  instr_cycles = 2;
 }
 
 void Cpu::cp_a_n8() {
   cp_a_helper(next8());
+  instr_cycles = 2;
 }
 
 void Cpu::dec_r8(REGISTER r8) {
@@ -1266,6 +1282,7 @@ void Cpu::dec_r8(REGISTER r8) {
   set_flag(FLAG_Z, *reg == 0);
   set_flag(FLAG_N, 1);
   set_flag(FLAG_H, (prev & 0xF) == 0);
+  instr_cycles = 1;
 }
 
 void Cpu::dec_hl() {
@@ -1274,6 +1291,7 @@ void Cpu::dec_hl() {
   set_flag(FLAG_Z, read_byte(HL.reg) == 0);
   set_flag(FLAG_N, 1);
   set_flag(FLAG_H, (prev & 0xF) == 0);
+  instr_cycles = 3;
 }
 
 void Cpu::inc_r8(REGISTER r8) {
@@ -1283,6 +1301,7 @@ void Cpu::inc_r8(REGISTER r8) {
   set_flag(FLAG_Z, *reg == 0);
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, (prev & 0xF) == 0xF);
+  instr_cycles = 1;
 }
 
 void Cpu::inc_hl() {
@@ -1291,6 +1310,7 @@ void Cpu::inc_hl() {
   set_flag(FLAG_Z, read_byte(HL.reg) == 0);
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, (prev & 0xF) == 0xF);  
+  instr_cycles = 3;
 }
 
 void Cpu::sbc_a_helper(uint8_t val) {
@@ -1305,14 +1325,17 @@ void Cpu::sbc_a_helper(uint8_t val) {
 
 void Cpu::sbc_a_r8(REGISTER r8) {
   sbc_a_helper(read_r8(r8));
+  instr_cycles = 1;
 }
 
 void Cpu::sbc_a_hl() {
   sbc_a_helper(read_byte(HL.reg));
+  instr_cycles = 2;
 }
 
 void Cpu::sbc_a_n8() {
   sbc_a_helper(next8());
+  instr_cycles = 2;
 }
 
 void Cpu::sub_a_helper(uint8_t val) {
@@ -1326,14 +1349,17 @@ void Cpu::sub_a_helper(uint8_t val) {
 
 void Cpu::sub_a_r8(REGISTER r8) {
   sub_a_helper(read_r8(r8));
+  instr_cycles = 1;
 }
 
 void Cpu::sub_a_hl() {
   sub_a_helper(read_byte(HL.reg));
+  instr_cycles = 2;
 }
 
 void Cpu::sub_a_n8() {
   sub_a_helper(next8());
+  instr_cycles = 2;
 }
 
 
@@ -1348,16 +1374,19 @@ void Cpu::add_hl_r16(REGISTER r16) {
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, (prev & 0xFFF) + (val & 0xFFF) > 0xFFF);
   set_flag(FLAG_C, prev + val > 0xFFFF);
+  instr_cycles = 2;
 }
 
 void Cpu::dec_r16(REGISTER r16) {
   uint16_t *reg = find_r16(r16);
   *reg -= 1;
+  instr_cycles = 2;
 }
 
 void Cpu::inc_r16(REGISTER r16) {
   uint16_t *reg = find_r16(r16);
   *reg += 1;
+  instr_cycles = 2;
 }
 
 
@@ -1375,20 +1404,24 @@ void Cpu::and_a_helper(uint8_t val) {
 
 void Cpu::and_a_r8(REGISTER r8) {
   and_a_helper(read_r8(r8));
+  instr_cycles = 1;
 }
 
 void Cpu::and_a_hl() {
   and_a_helper(read_byte(HL.reg));
+  instr_cycles = 2;
 }
 
 void Cpu::and_a_n8() {
   and_a_helper(next8());
+  instr_cycles = 2;
 }
 
 void Cpu::cpl() {
   AF.first = ~AF.first;
   set_flag(FLAG_N, 1);
   set_flag(FLAG_H, 1);
+  instr_cycles = 1;
 }
 
 void Cpu::or_a_helper(uint8_t val) {
@@ -1401,14 +1434,17 @@ void Cpu::or_a_helper(uint8_t val) {
 
 void Cpu::or_a_r8(REGISTER r8) {
   or_a_helper(read_r8(r8));
+  instr_cycles = 1;
 }
 
 void Cpu::or_a_hl() {
   or_a_helper(read_byte(HL.reg));
+  instr_cycles = 2;
 }
 
 void Cpu::or_a_n8() {
   or_a_helper(next8());
+  instr_cycles = 2;
 }
 
 void Cpu::xor_a_helper(uint8_t val) {
@@ -1421,14 +1457,17 @@ void Cpu::xor_a_helper(uint8_t val) {
 
 void Cpu::xor_a_r8(REGISTER r8) {
   xor_a_helper(read_r8(r8));
+  instr_cycles = 1;
 }
 
 void Cpu::xor_a_hl() {
   xor_a_helper(read_byte(HL.reg));
+  instr_cycles = 2;
 }
 
 void Cpu::xor_a_n8() {
   xor_a_helper(next8());
+  instr_cycles = 2;
 }
 
 
@@ -1442,6 +1481,7 @@ void Cpu::bit_u3_r8(uint8_t bit, REGISTER r8) {
   set_flag(FLAG_Z, (reg & mask) == 0);
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, 1);
+  instr_cycles = 2;
 }
 
 void Cpu::bit_u3_hl(uint8_t bit) {
@@ -1450,6 +1490,7 @@ void Cpu::bit_u3_hl(uint8_t bit) {
   set_flag(FLAG_Z, (val & mask) == 0);
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, 1);
+  instr_cycles = 3;
 }
 
 void Cpu::res_u3_r8(uint8_t bit, REGISTER r8) {
@@ -1457,23 +1498,27 @@ void Cpu::res_u3_r8(uint8_t bit, REGISTER r8) {
   mask = ~mask;
   uint8_t *reg = find_r8(r8);
   *reg &= mask;
+  instr_cycles = 2;
 }
 
 void Cpu::res_u3_hl(uint8_t bit) {
   uint8_t mask = 1 << bit;
   mask = ~mask;
   write_byte(HL.reg, read_byte(HL.reg) & mask);
+  instr_cycles = 4;
 }
 
 void Cpu::set_u3_r8(uint8_t bit, REGISTER r8) {
   uint8_t mask = 1 << bit;
   uint8_t *reg = find_r8(r8);
   *reg |= mask;
+  instr_cycles = 2;
 }
 
 void Cpu::set_u3_hl(uint8_t bit) {
   uint8_t mask = 1 << bit;
   write_byte(HL.reg, read_byte(HL.reg) | mask);
+  instr_cycles = 4;
 }
 
 
@@ -1496,6 +1541,7 @@ void Cpu::rl_r8(REGISTER r8) {
   write_r8(r8, reg);
 
   set_shift_flags(reg);
+  instr_cycles = 2;
 }
 
 void Cpu::rl_hl() {
@@ -1507,6 +1553,7 @@ void Cpu::rl_hl() {
   write_byte(HL.reg, val);
 
   set_shift_flags(val);
+  instr_cycles = 4;
 }
 
 void Cpu::rla() {
@@ -1518,6 +1565,7 @@ void Cpu::rla() {
   AF.first = val;
 
   set_shift_flags(1); // RESET zero flag
+  instr_cycles = 1;
 }
 
 void Cpu::rlc_r8(REGISTER r8) {
@@ -1529,6 +1577,7 @@ void Cpu::rlc_r8(REGISTER r8) {
   write_r8(r8, reg);
 
   set_shift_flags(reg);
+  instr_cycles = 2;
 }
 
 void Cpu::rlc_hl() {
@@ -1540,6 +1589,7 @@ void Cpu::rlc_hl() {
   write_byte(HL.reg, val);
 
   set_shift_flags(val);
+  instr_cycles = 4;
 }
 
 void Cpu::rlca() {
@@ -1551,6 +1601,7 @@ void Cpu::rlca() {
   AF.first = val;
 
   set_shift_flags(1); // RESET zero flag
+  instr_cycles = 1;
 }
 
 void Cpu::rr_r8(REGISTER r8) {
@@ -1562,6 +1613,7 @@ void Cpu::rr_r8(REGISTER r8) {
   write_r8(r8, reg);
 
   set_shift_flags(reg);
+  instr_cycles = 2;
 }
 
 void Cpu::rr_hl() {
@@ -1573,6 +1625,7 @@ void Cpu::rr_hl() {
   write_byte(HL.reg, val);
 
   set_shift_flags(val);
+  instr_cycles = 4;
 }
 
 void Cpu::rra() {
@@ -1583,6 +1636,7 @@ void Cpu::rra() {
   val |= carry_flag;
   AF.first = val;
   set_shift_flags(1); // RESET zero flag
+  instr_cycles = 1;
 }
 
 void Cpu::rrc_r8(REGISTER r8) {
@@ -1593,6 +1647,7 @@ void Cpu::rrc_r8(REGISTER r8) {
   val |= lsb;
   write_r8(r8, val);
   set_shift_flags(val);
+  instr_cycles = 2;
 }
 
 void Cpu::rrc_hl() {
@@ -1603,6 +1658,7 @@ void Cpu::rrc_hl() {
   val |= lsb;
   write_byte(HL.reg, val);
   set_shift_flags(val);
+  instr_cycles = 4;
 }
 
 void Cpu::rrca() {
@@ -1613,6 +1669,7 @@ void Cpu::rrca() {
   val |= lsb;
   AF.first = val;
   set_shift_flags(1); //RESET zero flag
+  instr_cycles = 1;
 }
 
 void Cpu::sla_r8(REGISTER r8) {
@@ -1621,6 +1678,7 @@ void Cpu::sla_r8(REGISTER r8) {
   val <<= 1;
   write_r8(r8, val);
   set_shift_flags(val);
+  instr_cycles = 2;
 }
 
 void Cpu::sla_hl() {
@@ -1629,6 +1687,7 @@ void Cpu::sla_hl() {
   val <<= 1;
   write_byte(HL.reg, val);
   set_shift_flags(val);
+  instr_cycles = 4;
 }
 
 void Cpu::sra_r8(REGISTER r8) {
@@ -1639,6 +1698,7 @@ void Cpu::sra_r8(REGISTER r8) {
   val |= mask;
   write_r8(r8, val);
   set_shift_flags(val);
+  instr_cycles = 2;
 }
 
 void Cpu::sra_hl() {
@@ -1649,6 +1709,7 @@ void Cpu::sra_hl() {
   val |= mask;
   write_byte(HL.reg, val);
   set_shift_flags(val);
+  instr_cycles = 4;
 }
 
 void Cpu::srl_r8(REGISTER r8) {
@@ -1657,6 +1718,7 @@ void Cpu::srl_r8(REGISTER r8) {
   val >>= 1;
   write_r8(r8, val);
   set_shift_flags(val);
+  instr_cycles = 2;
 }
 
 void Cpu::srl_hl() {
@@ -1665,6 +1727,7 @@ void Cpu::srl_hl() {
   val >>= 1;
   write_byte(HL.reg, val);
   set_shift_flags(val);
+  instr_cycles = 4;
 }
 
 void Cpu::swap_r8(REGISTER r8) {
@@ -1678,6 +1741,7 @@ void Cpu::swap_r8(REGISTER r8) {
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, 0);
   set_flag(FLAG_C, 0);
+  instr_cycles = 2;
 }
 
 void Cpu::swap_hl() {
@@ -1691,6 +1755,7 @@ void Cpu::swap_hl() {
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, 0);
   set_flag(FLAG_C, 0);
+  instr_cycles = 4;
 }
 
 
@@ -1709,63 +1774,79 @@ void Cpu::call_n16() {
   write_byte(--sp, pc & 0xFF);
   
   pc = n16;
+  instr_cycles = 6;
 }
 
 void Cpu::call_cc_n16(int flag, bool condition) {
   if (get_flag(flag) == condition) {
     call_n16();
+    // call_n16() sets the number of cycles
   }
   else {
+    instr_cycles = 3;
     pc += 2;
   }
 }
 
 void Cpu::jp_hl() {
   pc = HL.reg;
+  instr_cycles = 1; 
 }
 
 void Cpu::jp_n16() {
   uint16_t address = next16();
   pc = address;
+  instr_cycles = 4;
 }
 
 void Cpu::jp_cc_n16(int flag, bool condition) {
   if (get_flag(flag) == condition) {
     jp_n16();
+    // jp_n16() sets the number of cycles
   }
   else {
     pc += 2;
+    instr_cycles = 3;
   }
 }
 
 void Cpu::jr_e8() {
   int8_t e8 = (int8_t)next8();
   pc += e8;
+  instr_cycles = 3;
 }
 
 void Cpu::jr_cc_e8(int flag, bool condition) {
   if( get_flag(flag) == condition ) {
     jr_e8();
+    // jr_e8() sets the number of cycles
   }
   else {
     pc++;
+    instr_cycles = 2;
   }
 }
 
 void Cpu::ret() {
   pc = read_word(sp);
   sp += 2;
+  instr_cycles = 4;
 }
 
 void Cpu::ret_cc(int flag, bool condition) {
   if (get_flag(flag) == condition) {
     ret();
+    instr_cycles = 5;
+  }
+  else {
+    instr_cycles = 2;  
   }
 }
 
 void Cpu::reti() {
   ret();
   ime = 1;
+  instr_cycles = 4;
 }
 
 void Cpu::rst_vec(uint8_t n) {
@@ -1774,6 +1855,7 @@ void Cpu::rst_vec(uint8_t n) {
   write_byte(--sp, pc >> 8); // most significant byte
   write_byte(--sp, pc & 0xFF);
   pc = addr;
+  instr_cycles = 4;
 }
 
 /*
@@ -1784,12 +1866,14 @@ void Cpu::ccf() {
   set_flag(FLAG_C, !get_flag(FLAG_C));
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, 0);
+  instr_cycles = 1;
 }
 
 void Cpu::scf() {
   set_flag(FLAG_C, 1);
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, 0);
+  instr_cycles = 1;
 }
 
 
@@ -1803,6 +1887,7 @@ void Cpu::add_hl_sp() {
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, (prev & 0xFFF) + (sp & 0xFFF) > 0xFFF);
   set_flag(FLAG_C, prev + sp > 0xFFFF);
+  instr_cycles = 2;
 }
 
 void Cpu::add_sp_e8() {
@@ -1815,19 +1900,23 @@ void Cpu::add_sp_e8() {
   set_flag(FLAG_N, 0);
   set_flag(FLAG_H, (prev & 0xF) + (u8 & 0xF) > 0xF);
   set_flag(FLAG_C, prev + u8 > 0xFF);
+  instr_cycles = 4;
 }
 
 void Cpu::dec_sp() {
   sp--;
+  instr_cycles = 2;
 }
 
 void Cpu::inc_sp() {
   sp++;
+  instr_cycles = 2;
 }
 
 void Cpu::ld_sp_n16() {
   // copy n16 into sp 
   sp = next16();
+  instr_cycles = 3;
 }
 
 void Cpu::ld_n16_sp() {
@@ -1836,6 +1925,7 @@ void Cpu::ld_n16_sp() {
   unsigned short n16 = next16();
   write_byte(n16, sp & 0xFF); 
   write_byte(n16 + 1, sp >> 8);
+  instr_cycles = 5;
 }
 
 void Cpu::ld_hl_sp_e8() {
@@ -1853,16 +1943,19 @@ void Cpu::ld_hl_sp_e8() {
     set_flag(FLAG_C, 1);
   }
   else set_flag(FLAG_C, 0);
+  instr_cycles = 3;
 }
 
 void Cpu::ld_sp_hl() {
   // copy HL into sp
   sp = HL.reg;
+  instr_cycles = 2;
 }
 
 void Cpu::pop_af() {
   AF.second = read_byte(sp++);
   AF.first = read_byte(sp++);
+  instr_cycles = 3;
 }
 
 void Cpu::pop_r16(REGISTER r16) {
@@ -1870,11 +1963,13 @@ void Cpu::pop_r16(REGISTER r16) {
   uint8_t high = read_byte(sp++);
   uint16_t val = (high << 8) | low;
   write_r16(r16, val);
+  instr_cycles = 3;
 }
 
 void Cpu::push_af() {
   write_byte(--sp, AF.first);
   write_byte(--sp, AF.second);
+  instr_cycles = 4;
 }
 
 void Cpu::push_r16(REGISTER r16) {
@@ -1884,6 +1979,7 @@ void Cpu::push_r16(REGISTER r16) {
 
   write_byte(--sp, high);
   write_byte(--sp, low);
+  instr_cycles = 4;
 }
 
 
@@ -1893,15 +1989,28 @@ void Cpu::push_r16(REGISTER r16) {
 
 void Cpu::di() {
   ime = 0;
+  instr_cycles = 1;
 }
 
 void Cpu::ei() {
   set_ime = true;
   is_last_instr_ei = true;
+  instr_cycles = 1;
 }
 
 void Cpu::halt() {
-  //TODO
+  bool interrupts_pending = read_byte(IE_REG) & read_byte(IF_REG);
+  if (ime) {
+    service_interrupt();
+  }
+  else {
+    if (interrupts_pending) {
+
+    }
+    else {
+      state = HALTED;
+    }
+  }
 }
 
 
@@ -1927,11 +2036,12 @@ void Cpu::daa() {
 
   set_flag(FLAG_Z, AF.first == 0);
   set_flag(FLAG_H, 0);
+  instr_cycles = 1;
 }
 
 void Cpu::nop() {
   // do nothing
-  return;
+  instr_cycles = 1;
 }
 
 void Cpu::stop() {
