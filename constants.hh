@@ -16,7 +16,7 @@
 
 // interrupt bit positions
 #define VBLANK_INTER (0)
-#define LCD_INTER (1) // aka stat
+#define STAT_INTER (1) // aka stat
 #define TIMER_INTER (2)
 #define SERIAL_INTER (3)
 #define JOYPAD_INTER (4)

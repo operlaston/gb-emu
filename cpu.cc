@@ -168,8 +168,8 @@ void Cpu::service_interrupt() {
         case VBLANK_INTER:
           interrupt_address = VBLANK_HANDLER;
           break;
-        case LCD_INTER:
-          interrupt_address = LCD_HANDLER;
+        case STAT_INTER:
+          interrupt_address = STAT_HANDLER;
           break;
         case TIMER_INTER:
           interrupt_address = TIMER_HANDLER;

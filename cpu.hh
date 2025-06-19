@@ -12,7 +12,7 @@
 
 // interrupt mem addresses
 #define VBLANK_HANDLER (0x40)
-#define LCD_HANDLER (0x48) // aka stat
+#define STAT_HANDLER (0x48) // aka lcd
 #define TIMER_HANDLER (0x50)
 #define SERIAL_HANDLER (0x58)
 #define JOYPAD_HANDLER (0x60)

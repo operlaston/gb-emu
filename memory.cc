@@ -180,6 +180,12 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
     return;
   }
 
+  // writing to internal ram also writes to echo ram
+  else if (address >= 0xC000 && address <=0xDDFF) {
+    mem[address] = data;
+    mem[address + 0x2000] = data;
+  }
+
   // writing to echo ram also writes to ram
   else if (address >= 0xE000 && address <= 0xFDFF) {
     mem[address] = data;
