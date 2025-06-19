@@ -1,21 +1,24 @@
 CC = g++
 CCFLAGS = -g -Wall -Wextra -std=c++17 -O2
-OBJ = cpu.o cpu_table.o memory.o main.o
+OBJ = gameboy.o cpu.o cpu_table.o memory.o main.o
 TARGET = gameboy
 
-gameboy: cpu.o cpu_table.o memory.o main.o
+gameboy: gameboy.o cpu.o cpu_table.o memory.o main.o
 	$(CC) $(CCFLAGS) -o $(TARGET) $(OBJ)
 
-main.o: main.cc cpu.hh
+main.o: main.cc
 	$(CC) $(CCFLAGS) -c main.cc
 
-cpu.o: cpu.cc cpu.hh
+gameboy.o: gameboy.cc
+	$(CC) $(CCFLAGS) -c gameboy.cc
+
+cpu.o: cpu.cc 
 	$(CC) $(CCFLAGS) -c cpu.cc
 
-cpu_table.o: cpu_table.cc cpu.hh
+cpu_table.o: cpu_table.cc
 	$(CC) $(CCFLAGS) -c cpu_table.cc
 
-memory.o: memory.cc memory.hh
+memory.o: memory.cc
 	$(CC) $(CCFLAGS) -c memory.cc
 
 clean:

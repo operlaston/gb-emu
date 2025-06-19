@@ -1,15 +1,16 @@
 #include "cpu.hh"
+#include "constants.hh"
 #include <cstdint>
 #include <cstring>
 #include <pthread.h>
 #include <cstdio>
 #include <iostream>
 using namespace std;
-//
-Cpu::Cpu(char *rom_path) : mmu(rom_path) {
+
+Cpu::Cpu(Memory& mem) : mmu(mem) {
   // initialize program state (put in higher level class later)
   state = RUNNING;
-//
+
   // initialize program counter, stack pointer, registers
   pc = 0x100;
   sp = 0xFFFE;
@@ -23,7 +24,7 @@ Cpu::Cpu(char *rom_path) : mmu(rom_path) {
   instr_cycles = 0;
 
   // set screen
-  memset(screen, 0, sizeof(screen));
+  // memset(screen, 0, sizeof(screen));
 
   init_opcode_table();
   init_prefix_table();
@@ -263,24 +264,24 @@ uint8_t Cpu::fetch_and_execute() {
   return instr_cycles; //
 }
 
-void Cpu::update() {
-  // max cycles per frame (60 frames per second)
-  const int CYCLES_PER_FRAME = CYCLES_PER_SECOND / 60;
-  int cycles_this_update = 0;
-  while (cycles_this_update < CYCLES_PER_FRAME) {
-    // perform a cycle
-    uint8_t cycles = 0;
-    if (state == RUNNING) cycles = fetch_and_execute();
-    else if (state == HALTED) cycles = 1;
-    cycles_this_update += cycles;
-    // update timers
-    update_timers(cycles);
-    // update graphics
-    // do interrupts
-    service_interrupt();
-  }
-  // render the screen
-}
+// void Cpu::update() {
+//   // max cycles per frame (60 frames per second)
+//   const int CYCLES_PER_FRAME = CYCLES_PER_SECOND / 60;
+//   int cycles_this_update = 0;
+//   while (cycles_this_update < CYCLES_PER_FRAME) {
+//     // perform a cycle
+//     uint8_t cycles = 0;
+//     if (state == RUNNING) cycles = fetch_and_execute();
+//     else if (state == HALTED) cycles = 1;
+//     cycles_this_update += cycles;
+//     // update timers
+//     update_timers(cycles);
+//     // update graphics
+//     // do interrupts
+//     service_interrupt();
+//   }
+//   // render the screen
+// }
 
 
 /*

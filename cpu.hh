@@ -10,27 +10,6 @@
 #define FLAG_H (5) // half carry flag
 #define FLAG_C (4) // carry flag
 
-// cpu cycles per second
-//#define CYCLES_PER_SECOND (4194304)
-#define CYCLES_PER_SECOND (1048576) // use m-cycles instead of t-cycles
-
-// timer registers (addresses in memory)
-#define DIV_REG (0xFF04) // div timer
-#define TIMA_REG (0xFF05) // the address of the timer
-#define TMA_REG (0xFF06) // address of the value to reset the timer to
-#define TAC_REG (0xFF07) // address of the frequency of the timer
-
-// interrupt registers
-#define IF_REG (0xFF0F)
-#define IE_REG (0xFFFF)
-
-// interrupt bit positions
-#define VBLANK_INTER (0)
-#define LCD_INTER (1) // aka stat
-#define TIMER_INTER (2)
-#define SERIAL_INTER (3)
-#define JOYPAD_INTER (4)
-
 // interrupt mem addresses
 #define VBLANK_HANDLER (0x40)
 #define LCD_HANDLER (0x48) // aka stat
@@ -80,9 +59,8 @@ union reg_t{
 
 class Cpu { 
 private:
-  CPU_STATE state;
 
-  Memory mmu;
+  Memory& mmu;
   
   std::function<void()> opcode_table[256];
   std::function<void()> prefix_table[256];
@@ -97,7 +75,7 @@ private:
   unsigned short sp;
   unsigned short pc;
 
-  unsigned char screen[160][144][3]; // r/g/b for color
+  //unsigned char screen[160][144][3]; // r/g/b for color
   bool ime; // ime (interrupt) flag
   bool set_ime; // set by the EI instruction
   bool is_last_instr_ei;
@@ -118,15 +96,11 @@ private:
   void set_flag(int, bool);
   bool get_flag(int);
   void request_interrupt(uint8_t bit);
-  void service_interrupt();
 
   // timer handling
-  void update_timers(uint8_t);
   uint16_t div_cycles;
   uint16_t tima_cycles;
 
-  // instruction loop
-  uint8_t fetch_and_execute();
   
   // load instructions
   void ld_r8_r8(REGISTER, REGISTER);
@@ -269,9 +243,12 @@ private:
   void set_shift_flags(uint8_t);
 
 public: 
-  Cpu(char *rom_path);
+  Cpu(Memory& mmu);
   // use default destructor
-  void update();
+  uint8_t fetch_and_execute();
+  CPU_STATE state;
+  void update_timers(uint8_t);
+  void service_interrupt();
 };
 
 #endif
