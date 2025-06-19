@@ -1,9 +1,8 @@
 #ifndef CPU_H
 #define CPU_H
-#include <cstring>
-#include <stdio.h>
-#include <stdint.h>
-#include <iostream>
+#include <cstdint>
+#include <functional>
+#include "memory.hh"
 
 // flags (F register)
 #define FLAG_Z (7) // zero flag
@@ -39,11 +38,11 @@
 #define SERIAL_HANDLER (0x58)
 #define JOYPAD_HANDLER (0x60)
 
-enum banking_types {
-  MBC1,
-  MBC2,
-  NONE
-};
+// enum banking_types {
+//   MBC1,
+//   MBC2,
+//   NONE
+// };
 
 typedef enum {
   REG_A,
@@ -80,24 +79,16 @@ union reg_t{
 };
 
 class Cpu { 
+private:
   CPU_STATE state;
 
-  unsigned char mem[0x10000];
-  unsigned char rom[0x200000];
-  unsigned char num_rom_banks; // rom banks are 16KiB in size
-  unsigned char num_ram_banks; // ram banks are 8KiB in size
-  enum banking_types rom_banking_type;
-  unsigned char curr_rom_bank;
-  unsigned char curr_ram_bank;
-  bool ram_enabled;
-  unsigned char ram_banks[0x8000]; // a ram bank is 0x2000 in size and there are 4 max
+  Memory mmu;
+  
   std::function<void()> opcode_table[256];
   std::function<void()> prefix_table[256];
 
-
-  // first letter is high and second is low
+  // first letter is high and second is low (little endian)
   // e.g. for AF, the higher half is A and the lower half is F
-  // ^^ for little endian systems
   reg_t AF; 
   reg_t BC;
   reg_t DE;
@@ -112,18 +103,16 @@ class Cpu {
   bool is_last_instr_ei;
   bool is_prefix; // set by prefix instruction opcode 0xCB
   uint8_t instr_cycles; // m-cycles of the last executed instruction
+  
+  void init_opcode_table();
+  void init_prefix_table();
 
-
-  void handle_banking(unsigned short address, unsigned char data);
-  void write_byte(unsigned short address, unsigned char data);
-  void write_r8(REGISTER, unsigned char);
-  void write_r16(REGISTER, unsigned short);
-  unsigned char read_byte(unsigned short address) const;
-  unsigned short read_word(unsigned short address) const;
-  unsigned char read_r8(REGISTER);
-  unsigned short read_r16(REGISTER);
   unsigned char *find_r8(REGISTER);
   unsigned short *find_r16(REGISTER);
+  void write_r8(REGISTER, unsigned char);
+  void write_r16(REGISTER, unsigned short);
+  unsigned char read_r8(REGISTER);
+  unsigned short read_r16(REGISTER);
   unsigned char next8();
   unsigned short next16();
   void set_flag(int, bool);
@@ -135,10 +124,9 @@ class Cpu {
   void update_timers(uint8_t);
   uint16_t div_cycles;
   uint16_t tima_cycles;
-  // uint8_t div;
-  // uint8_t tima;
-  // uint8_t tma;
-  // uint8_t tac;
+
+  // instruction loop
+  uint8_t fetch_and_execute();
   
   // load instructions
   void ld_r8_r8(REGISTER, REGISTER);
@@ -282,9 +270,8 @@ class Cpu {
 
 public: 
   Cpu(char *rom_path);
-  ~Cpu();
+  // use default destructor
   void update();
-  uint8_t fetch_and_execute();
 };
 
 #endif
