@@ -95,7 +95,6 @@ private:
   unsigned short next16();
   void set_flag(int, bool);
   bool get_flag(int);
-  void request_interrupt(uint8_t bit);
 
   // timer handling
   uint16_t div_cycles;
@@ -248,6 +247,7 @@ public:
   uint8_t fetch_and_execute();
   CPU_STATE state;
   void update_timers(uint8_t);
+  // interrupt handling
   void service_interrupt();
 };
 

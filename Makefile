@@ -1,10 +1,11 @@
 CC = g++
-CCFLAGS = -g -Wall -Wextra -std=c++17 -O2
-OBJ = gameboy.o cpu.o cpu_table.o memory.o main.o
+CCFLAGS = -g -Wall -Wextra -std=c++17 -O2 -I/usr/local/include
+LDFLAGS = -L/usr/local/lib -lSDL2
+OBJ = main.o gameboy.o cpu.o cpu_table.o memory.o gpu.o
 TARGET = gameboy
 
-gameboy: gameboy.o cpu.o cpu_table.o memory.o main.o
-	$(CC) $(CCFLAGS) -o $(TARGET) $(OBJ)
+gameboy: $(OBJ)
+	$(CC) $(CCFLAGS) -o $(TARGET) $(OBJ) $(LDFLAGS)
 
 main.o: main.cc
 	$(CC) $(CCFLAGS) -c main.cc
@@ -20,6 +21,9 @@ cpu_table.o: cpu_table.cc
 
 memory.o: memory.cc
 	$(CC) $(CCFLAGS) -c memory.cc
+
+gpu.o: gpu.cc
+	$(CC) $(CCFLAGS) -c gpu.cc
 
 clean:
 	rm -f *.o $(TARGET)

@@ -16,13 +16,13 @@ Memory::Memory(char *rom_path) {
   fseek(rom_fp, 0, SEEK_END);
   unsigned long fsize = ftell(rom_fp); 
   rewind(rom_fp);
-  if (fsize > sizeof(rom)) { 
+  if (fsize > sizeof(cart)) { 
     cout << "rom is too large" << endl;
     fclose(rom_fp);
     rom_fp = NULL;
     exit(1);
   }
-  if (fread(rom, 1, fsize, rom_fp) != fsize) { 
+  if (fread(cart, 1, fsize, rom_fp) != fsize) { 
     cout << "failed to read rom contents" << endl;
     fclose(rom_fp);
     rom_fp = NULL;
@@ -32,23 +32,23 @@ Memory::Memory(char *rom_path) {
   fclose(rom_fp);
   rom_fp = NULL;
 
-  if (rom[0x147] <= 3 && rom[0x147] >= 1) { 
+  if (cart[0x147] <= 3 && cart[0x147] >= 1) { 
     rom_banking_type = MBC1;
   }
-  else if (rom[0x147] == 5 || rom[0x147] == 6) { 
+  else if (cart[0x147] == 5 || cart[0x147] == 6) { 
     rom_banking_type = MBC2;
   }
   else {
     rom_banking_type = NONE;
   }
 
-  num_rom_banks = 2 << rom[0x148];
-  if (rom[0x148] > 6) {
+  num_rom_banks = 2 << cart[0x148];
+  if (cart[0x148] > 6) {
     cout << "invalid byte at 0x148 for rom size" << endl;
     exit(1);
   }
 
-  switch(rom[0x149]) {
+  switch(cart[0x149]) {
     case 0x0:
       num_ram_banks = 0;
       break;
@@ -69,9 +69,9 @@ Memory::Memory(char *rom_path) {
 
   uint8_t checksum = 0;
   for (uint16_t address = 0x0134; address <= 0x014C; address++) {
-    checksum = checksum - rom[address] - 1;
+    checksum = checksum - cart[address] - 1;
   }
-  if (checksum != rom[0x14D]) {
+  if (checksum != cart[0x14D]) {
     cout << "checksum did not pass. stopped during init" << endl;
     exit(1);
   }
@@ -84,7 +84,7 @@ Memory::Memory(char *rom_path) {
 
   // copy rom into memory
   for (unsigned long i = 0; i < 0x8000; i++) {
-    mem[i] = rom[i];
+    mem[i] = cart[i];
   }
 
   // set special rom registers
@@ -119,7 +119,8 @@ Memory::Memory(char *rom_path) {
   mem[0xFF4A] = 0x00;
   mem[0xFF4B] = 0x00;
   mem[0xFFFF] = 0x00;
-  
+
+  printf("initialized memory\n");
 }
 
 void Memory::handle_banking(unsigned short address, unsigned char data) {
@@ -202,6 +203,19 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
     mem[DIV_REG] = 0;
   }
 
+  else if (address == LY) {
+    mem[LY] = 0;
+  }
+
+  else if (address == 0xFF46) {
+    // DMA transfer
+    uint16_t xfer_i = data << 8;
+    for (int i = 0xFE00; i < 0xFEA0; i++) {
+      mem[i] = mem[xfer_i];
+      xfer_i++;
+    }
+  }
+
   else {
     mem[address] = data;
   }
@@ -212,7 +226,7 @@ unsigned char Memory::read_byte(unsigned short address) const {
   // reading from ROM bank
   if (address >= 0x4000 && address <= 0x7FFF) {
     unsigned short offset = address - 0x4000;
-    return rom[offset + (curr_rom_bank * 0x4000)];
+    return cart[offset + (curr_rom_bank * 0x4000)];
   }
 
   // reading from RAM bank
@@ -233,4 +247,19 @@ unsigned short Memory::read_word(unsigned short address) const {
 
 void Memory::inc_div() {
   mem[DIV_REG]++;
+}
+
+void Memory::request_interrupt(uint8_t bit) {
+  // IE (interrupt enable): 0xFFFF
+  // IF (interrupt flag/requested): 0xFF0F
+
+  write_byte(IF_REG, read_byte(IF_REG) | (1 << bit));
+}
+
+void Memory::reset_scanline() {
+  mem[LY] = 0;
+}
+
+void Memory::inc_scanline() {
+  mem[LY]++; 
 }

@@ -1,6 +1,8 @@
 #ifndef MEMORY_H
 #define MEMORY_H
 
+#include <cstdint>
+
 enum banking_types {
   MBC1,
   MBC2,
@@ -10,7 +12,7 @@ enum banking_types {
 class Memory {
 private:
   unsigned char mem[0x10000];
-  unsigned char rom[0x200000];
+  unsigned char cart[0x200000];
   unsigned char ram_banks[0x8000]; // a ram bank is 0x2000 in size and there are 4 max
   void handle_banking(unsigned short address, unsigned char data);
   unsigned char num_rom_banks; // rom banks are 16KiB in size
@@ -27,6 +29,9 @@ public:
   unsigned char read_byte(unsigned short address) const;
   unsigned short read_word(unsigned short address) const;
   void inc_div();
+  void request_interrupt(uint8_t);
+  void reset_scanline();
+  void inc_scanline();
 };
 
 #endif

@@ -2,12 +2,71 @@
 #define GPU_H
 
 #include "memory.hh"
+#include <cstdint>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_render.h>
+#include <SDL2/SDL_video.h>
+#include <SDL2/SDL_audio.h>
+#include <SDL2/SDL_error.h>
+
+// bits for the LCD control register
+typedef enum {
+  BG_WIN_ENABLE = 0,
+  OBJ_ENABLE = 1,
+  OBJ_SIZE = 2,
+  BG_TILE_MAP = 3,
+  TILE_DATA = 4,
+  WIN_ENABLE = 5,
+  WIN_TILE_MAP = 6,
+  LCD_ENABLE = 7
+} LCD_CONTROL_BIT;
+
+#define TILE_DATA_LENGTH (0x1000)
+#define MODE_2_CYCLES (20) // 20
+#define MODE_3_CYCLES (43) // 43
+#define MODE_0_CYCLES (51) // 51
+#define MODE_1_CYCLES (114)
+#define TILE_MAP_LENGTH (0x400)
+#define SCREEN_WIDTH (160)
+#define SCREEN_HEIGHT (144)
+#define SCALE_FACTOR (5)
 
 class Gpu {
   Memory& mmu;
+  uint16_t mode_clock;
+  bool win_enable;
+  bool sprite_enable;
+  bool lcd_enable;
+  bool bg_win_enable;
+  uint8_t mode;
+  uint16_t win_tile_map_addr;
+  uint16_t bg_tile_map_addr;
+  uint16_t tile_data_addr;
+  uint8_t sprite_height;
+  uint8_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
+  uint16_t sprite_buf[10]; // memory locations of sprites in the oam
+  uint8_t num_sprites;
+  uint8_t scx;
+  uint8_t scy;
+  uint8_t wy;
+  uint8_t wx;
+
+  bool get_lcdc_bit(LCD_CONTROL_BIT);
+  uint8_t draw_bg_pixel(uint8_t, uint8_t);
+  void set_draw_color(uint8_t);
+  void set_lcdc_status();
+  void draw_line();
+  void set_mode(uint8_t);
+
+  // SDL
+  SDL_Window *window;
+  SDL_Renderer *renderer;
+
 public:
   Gpu(Memory& mem);
-  ~Gpu() = default;
+  // use default destructor
+  void step(uint8_t);
+  void render();
 };
 
 #endif

@@ -30,6 +30,7 @@ Cpu::Cpu(Memory& mem) : mmu(mem) {
   init_prefix_table();
 
   //cout << "set up instruction tables and initialized memory" << endl;
+  cout << "initalized cpu" << endl;
 }
 
 unsigned char *Cpu::find_r8(REGISTER reg) {
@@ -136,13 +137,6 @@ bool Cpu::get_flag(int flagbit) {
   return read_r8(REG_F) & mask;
 }
 
-void Cpu::request_interrupt(uint8_t bit) {
-  // IE (interrupt enable): 0xFFFF
-  // IF (interrupt flag/requested): 0xFF0F
-
-  mmu.write_byte(IF_REG, mmu.read_byte(IF_REG) | (1 << bit));
-}
-
 void Cpu::service_interrupt() {
   // IE (interrupt enable): 0xFFFF
   // IF (interrupt flag/requested): 0xFF0F
@@ -196,7 +190,11 @@ void Cpu::service_interrupt() {
 
 void Cpu::update_timers(uint8_t cycles) {
   div_cycles += cycles;
-  while (div_cycles >= 0xFF) {
+  // while (div_cycles >= 0xFF) {
+  //   mmu.inc_div();
+  //   div_cycles -= 0xFF;
+  // }
+  while (div_cycles >= 0x40) { // 0xFF / 4 = 0x40 -> using m-cycles instead of t-cycles
     mmu.inc_div();
     div_cycles -= 0xFF;
   }
@@ -225,7 +223,7 @@ void Cpu::update_timers(uint8_t cycles) {
     tima_cycles -= max_tima_cycles;
     if (tima == 0xFF) {
       mmu.write_byte(TIMA_REG, mmu.read_byte(TMA_REG));
-      request_interrupt(TIMER_INTER);
+      mmu.request_interrupt(TIMER_INTER);
     }
     else {
       mmu.write_byte(TIMA_REG, tima + 1);
@@ -261,7 +259,7 @@ uint8_t Cpu::fetch_and_execute() {
     cout << "unknown opcode detected. exiting now..." << endl;
     exit(1);
   }
-  return instr_cycles; //
+  return instr_cycles;
 }
 
 // void Cpu::update() {
