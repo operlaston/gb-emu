@@ -5,7 +5,7 @@ OBJ = main.o gameboy.o cpu.o cpu_table.o memory.o gpu.o
 TARGET = gameboy
 
 gameboy: $(OBJ)
-	$(CC) $(CCFLAGS) -o $(TARGET) $(OBJ) $(LDFLAGS)
+	$(CC) $(CCFLAGS) -o $(TARGET) $(OBJ)
 
 main.o: main.cc
 	$(CC) $(CCFLAGS) -c main.cc

@@ -205,9 +205,16 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
 
   else if (address == LY) {
     mem[LY] = 0;
+    if (mem[LY] == mem[LYC]) {
+      mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
+      if ((mem[LCD_STATUS] >> 6) & 0x1) {
+        request_interrupt(STAT_INTER);
+      }
+    }
+    else mem[LCD_STATUS] = mem[LCD_STATUS] & ~(1 << 2);
   }
 
-  else if (address == 0xFF46) {
+  else if (address == 0xFF46) { // DMA transfer
     // DMA transfer
     uint16_t xfer_i = data << 8;
     for (int i = 0xFE00; i < 0xFEA0; i++) {
@@ -262,4 +269,11 @@ void Memory::reset_scanline() {
 
 void Memory::inc_scanline() {
   mem[LY]++; 
+  if (mem[LY] == mem[LYC]) {
+    mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
+    if ((mem[LCD_STATUS] >> 6) & 0x1) {
+      request_interrupt(STAT_INTER);
+    }
+  }
+  else mem[LCD_STATUS] = mem[LCD_STATUS] & ~(1 << 2);
 }
