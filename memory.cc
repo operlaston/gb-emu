@@ -200,6 +200,7 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
 
   else if (address == DIV_REG) { // 0xFF04 (timer)
     // writing anything to this register resets it to 0
+    div = 0;
     mem[DIV_REG] = 0;
   }
 
@@ -252,8 +253,9 @@ unsigned short Memory::read_word(unsigned short address) const {
   return (upper_byte << 8) | lower_byte;
 }
 
-void Memory::inc_div() {
-  mem[DIV_REG]++;
+void Memory::update_div(uint8_t cycles) {
+  div += cycles;
+  mem[DIV_REG] = (div >> 8) & 0xFF;
 }
 
 void Memory::request_interrupt(uint8_t bit) {

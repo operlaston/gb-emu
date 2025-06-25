@@ -30,14 +30,14 @@ typedef enum {
 } LCD_STAT_BIT;
 
 #define TILE_DATA_LENGTH (0x1000)
-#define MODE_2_CYCLES (20) // 20
-#define MODE_3_CYCLES (43) // 43
-#define MODE_0_CYCLES (51) // 51
-#define MODE_1_CYCLES (114) // 114
+#define MODE_2_CYCLES (80) // t-cycles
+#define MODE_3_CYCLES (172)
+#define MODE_0_CYCLES (204)
+#define MODE_1_CYCLES (456)
 #define TILE_MAP_LENGTH (0x400)
 #define SCREEN_WIDTH (160)
 #define SCREEN_HEIGHT (144)
-#define SCALE_FACTOR (5)
+#define SCALE_FACTOR (3)
 
 class Gpu {
   Memory& mmu;
@@ -47,12 +47,11 @@ class Gpu {
   bool lcd_enable;
   bool bg_win_enable;
   uint8_t mode;
-  uint16_t win_tile_map_addr;
-  uint16_t bg_tile_map_addr;
-  uint16_t tile_data_addr;
+  uint16_t win_tile_map_base;
+  uint16_t bg_tile_map_base;
+  uint16_t tile_data_base;
   uint8_t sprite_height;
   uint8_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
-  uint16_t sprite_buf[10]; // memory locations of sprites in the oam
   uint8_t num_sprites;
   uint8_t scx;
   uint8_t scy;
@@ -62,8 +61,8 @@ class Gpu {
 
   bool get_lcdc_bit(LCD_CONTROL_BIT);
   bool get_stat_bit(LCD_STAT_BIT);
-  void draw_bg_tile_line(uint8_t);
-  void draw_win_tile_line(uint8_t);
+  void draw_tile_line(uint8_t);
+  void draw_sprite_tile_line(int16_t, int16_t, int16_t, uint8_t, uint8_t);
   void set_draw_color(uint8_t);
   void set_lcdc_status();
   void draw_line();

@@ -97,7 +97,6 @@ private:
   bool get_flag(int);
 
   // timer handling
-  uint16_t div_cycles;
   uint16_t tima_cycles;
 
   

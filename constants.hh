@@ -2,7 +2,7 @@
 #define CONSTANTS_H
 
 // cpu cycles per second
-#define CYCLES_PER_SECOND (1048576) // use m-cycles instead of t-cycles (4194304)
+#define CYCLES_PER_SECOND (4194304) // t-cycles
 
 // timer registers (addresses in memory)
 #define DIV_REG (0xFF04) // div timer
@@ -26,7 +26,7 @@
 
 // interrupt bit positions
 #define VBLANK_INTER (0)
-#define STAT_INTER (1) // aka stat
+#define STAT_INTER (1) // lcd interrupt
 #define TIMER_INTER (2)
 #define SERIAL_INTER (3)
 #define JOYPAD_INTER (4)

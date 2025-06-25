@@ -189,15 +189,11 @@ void Cpu::service_interrupt() {
 }
 
 void Cpu::update_timers(uint8_t cycles) {
-  div_cycles += cycles;
+  mmu.update_div(cycles);
   // while (div_cycles >= 0xFF) {
-  //   mmu.inc_div();
+  //   mmu.inc_div(); // increments DIV register after every 256 t-cycles
   //   div_cycles -= 0xFF;
   // }
-  while (div_cycles >= 0x40) { // 0xFF / 4 = 0x40 -> using m-cycles instead of t-cycles
-    mmu.inc_div();
-    div_cycles -= 0xFF;
-  }
 
   uint8_t tac = mmu.read_byte(TAC_REG);
   if (!(tac & 0x4)) { // clock is disabled
@@ -205,18 +201,18 @@ void Cpu::update_timers(uint8_t cycles) {
   }
   tac &= 0x3;
   uint8_t tima = mmu.read_byte(TIMA_REG);
-  uint32_t max_tima_cycles = 256; // tac == 0 (every 256 m-cycles)
+  uint32_t max_tima_cycles = 1024; // tac == 0 (every 1024 t-cycles or 256 m-cycles)
   if (tac == 1) {
-    // 262144 hz or increment every 4 m-cycles
-    max_tima_cycles = 4;
-  }
-  else if (tac == 2) {
-    // 65536 hz or increment every 16 m-cycles
+    // 262144 hz or increment every 16 t-cycles or 4 m-cycles
     max_tima_cycles = 16;
   }
-  else {
-    // 16384 hz of increment every 64 m-cycles
+  else if (tac == 2) {
+    // 65536 hz or increment every 64 t-cycles or 16 m-cycles
     max_tima_cycles = 64;
+  }
+  else {
+    // 16384 hz of increment every 256 t-cycles or 64 m-cycles
+    max_tima_cycles = 256;
   }
   tima_cycles += cycles;
   while (tima_cycles >= max_tima_cycles) {
@@ -259,7 +255,7 @@ uint8_t Cpu::fetch_and_execute() {
     cout << "unknown opcode detected. exiting now..." << endl;
     exit(1);
   }
-  return instr_cycles;
+  return (instr_cycles << 2); // convert to T-cycles
 }
 
 // void Cpu::update() {

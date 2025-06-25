@@ -22,13 +22,16 @@ private:
   unsigned char curr_ram_bank;
   bool ram_enabled;
 
+
 public:
   Memory(char *rom_path);
   // use default destructor
+  
+  uint16_t div;
   void write_byte(unsigned short address, unsigned char data);
   unsigned char read_byte(unsigned short address) const;
   unsigned short read_word(unsigned short address) const;
-  void inc_div();
+  void update_div(uint8_t);
   void request_interrupt(uint8_t);
   void reset_scanline();
   void inc_scanline();
