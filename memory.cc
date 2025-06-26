@@ -1,11 +1,12 @@
 #include "memory.hh"
 #include "constants.hh"
+#include "timer.hh"
 #include <cstdio>
 #include <iostream>
 
 using namespace std;
 
-Memory::Memory(char *rom_path) {
+Memory::Memory(char *rom_path){
 
   FILE *rom_fp = fopen(rom_path, "rb"); // open in read binary mode
   if (rom_fp == NULL) {
@@ -123,6 +124,10 @@ Memory::Memory(char *rom_path) {
   printf("initialized memory\n");
 }
 
+void Memory::set_timer(Timer *t) {
+  timer = t;
+}
+
 void Memory::handle_banking(unsigned short address, unsigned char data) {
   if (rom_banking_type == MBC1) {
     if (address < 0x2000) {
@@ -168,12 +173,12 @@ void Memory::handle_banking(unsigned short address, unsigned char data) {
 void Memory::write_byte(unsigned short address, unsigned char data) {
 
   // remove after testing
-  if (address == 0xFF02) {
-    char c = read_byte(0xFF01);
-    printf("%c", c);
-    fflush(stdout);
-    data &= ~0x80;
-  }
+  // if (address == 0xFF02) {
+  //   char c = read_byte(0xFF01);
+  //   printf("%c", c);
+  //   fflush(stdout);
+  //   data &= ~0x80;
+  // }
 
   // 0x0000-0x7FFF is read only
   if (address < 0x8000) {
@@ -198,30 +203,23 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
     return;
   }
 
-  else if (address == DIV_REG) { // 0xFF04 (timer)
-    // writing anything to this register resets it to 0
-    div = 0;
-    mem[DIV_REG] = 0;
+  else if (address >= DIV_REG && address <= TAC_REG) {
+    timer->timer_write(address, data);
   }
 
   else if (address == LY) {
     mem[LY] = 0;
-    if (mem[LY] == mem[LYC]) {
-      mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
-      if ((mem[LCD_STATUS] >> 6) & 0x1) {
-        request_interrupt(STAT_INTER);
-      }
-    }
-    else mem[LCD_STATUS] = mem[LCD_STATUS] & ~(1 << 2);
+    check_lyc_ly();
+  }
+
+  else if (address == LYC) {
+    mem[LYC] = data;
+    check_lyc_ly();
   }
 
   else if (address == 0xFF46) { // DMA transfer
     // DMA transfer
-    uint16_t xfer_i = data << 8;
-    for (int i = 0xFE00; i < 0xFEA0; i++) {
-      mem[i] = mem[xfer_i];
-      xfer_i++;
-    }
+    dma_transfer(data);
   }
 
   else {
@@ -243,6 +241,10 @@ unsigned char Memory::read_byte(unsigned short address) const {
     return ram_banks[offset + (curr_ram_bank * 0x2000)];
   }
 
+  else if (address >= DIV_REG && address <= TAC_REG) {
+    return timer->timer_read(address);
+  }
+
   return mem[address];
 }
 
@@ -251,11 +253,6 @@ unsigned short Memory::read_word(unsigned short address) const {
   unsigned char lower_byte = read_byte(address);
   unsigned char upper_byte = read_byte(address + 1);
   return (upper_byte << 8) | lower_byte;
-}
-
-void Memory::update_div(uint8_t cycles) {
-  div += cycles;
-  mem[DIV_REG] = (div >> 8) & 0xFF;
 }
 
 void Memory::request_interrupt(uint8_t bit) {
@@ -271,6 +268,10 @@ void Memory::reset_scanline() {
 
 void Memory::inc_scanline() {
   mem[LY]++; 
+  check_lyc_ly();
+}
+
+void Memory::check_lyc_ly() {
   if (mem[LY] == mem[LYC]) {
     mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
     if ((mem[LCD_STATUS] >> 6) & 0x1) {
@@ -278,4 +279,12 @@ void Memory::inc_scanline() {
     }
   }
   else mem[LCD_STATUS] = mem[LCD_STATUS] & ~(1 << 2);
+}
+
+void Memory::dma_transfer(uint8_t data) {
+  uint16_t xfer_i = data << 8;
+  for (int i = 0xFE00; i < 0xFEA0; i++) {
+    mem[i] = mem[xfer_i];
+    xfer_i++;
+  }
 }

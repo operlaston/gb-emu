@@ -97,7 +97,6 @@ private:
   bool get_flag(int);
 
   // timer handling
-  uint16_t tima_cycles;
 
   
   // load instructions
@@ -245,7 +244,7 @@ public:
   // use default destructor
   uint8_t fetch_and_execute();
   CPU_STATE state;
-  void update_timers(uint8_t);
+  // void update_timers(uint8_t);
   // interrupt handling
   void service_interrupt();
 };

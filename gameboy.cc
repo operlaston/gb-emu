@@ -1,15 +1,17 @@
 #include "gameboy.hh"
 #include "constants.hh"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_error.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_timer.h>
-#include <SDL2/SDL_video.h>
+// #include <SDL2/SDL.h>
+// #include <SDL2/SDL_error.h>
+// #include <SDL2/SDL_render.h>
+// #include <SDL2/SDL_timer.h>
+// #include <SDL2/SDL_video.h>
 
 Gameboy::Gameboy(char *rom_path)
   : mmu(rom_path),
     cpu(mmu),
-    gpu(mmu) {
+    gpu(mmu),
+    timer(mmu){
+  mmu.set_timer(&timer);
   printf("completed initalization\n");
 }
 
@@ -24,7 +26,11 @@ void Gameboy::update() {
     else if (cpu.state == HALTED) cycles = 1;
     cycles_this_update += cycles;
     // update timers
-    cpu.update_timers(cycles);
+    // cpu.update_timers(cycles);
+    for (int i = 0; i < cycles; i++) {
+      // update_timers
+      timer.tick();
+    }
     // update graphics
     gpu.step(cycles);
     // do interrupts

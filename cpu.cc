@@ -188,44 +188,44 @@ void Cpu::service_interrupt() {
   mmu.write_byte(IF_REG, if_reg & ~mask);
 }
 
-void Cpu::update_timers(uint8_t cycles) {
-  mmu.update_div(cycles);
-  // while (div_cycles >= 0xFF) {
-  //   mmu.inc_div(); // increments DIV register after every 256 t-cycles
-  //   div_cycles -= 0xFF;
-  // }
-
-  uint8_t tac = mmu.read_byte(TAC_REG);
-  if (!(tac & 0x4)) { // clock is disabled
-    return;
-  }
-  tac &= 0x3;
-  uint8_t tima = mmu.read_byte(TIMA_REG);
-  uint32_t max_tima_cycles = 1024; // tac == 0 (every 1024 t-cycles or 256 m-cycles)
-  if (tac == 1) {
-    // 262144 hz or increment every 16 t-cycles or 4 m-cycles
-    max_tima_cycles = 16;
-  }
-  else if (tac == 2) {
-    // 65536 hz or increment every 64 t-cycles or 16 m-cycles
-    max_tima_cycles = 64;
-  }
-  else {
-    // 16384 hz of increment every 256 t-cycles or 64 m-cycles
-    max_tima_cycles = 256;
-  }
-  tima_cycles += cycles;
-  while (tima_cycles >= max_tima_cycles) {
-    tima_cycles -= max_tima_cycles;
-    if (tima == 0xFF) {
-      mmu.write_byte(TIMA_REG, mmu.read_byte(TMA_REG));
-      mmu.request_interrupt(TIMER_INTER);
-    }
-    else {
-      mmu.write_byte(TIMA_REG, tima + 1);
-    }
-  }
-}
+// void Cpu::update_timers(uint8_t cycles) {
+//   mmu.update_div(cycles);
+//   // while (div_cycles >= 0xFF) {
+//   //   mmu.inc_div(); // increments DIV register after every 256 t-cycles
+//   //   div_cycles -= 0xFF;
+//   // }
+//
+//   uint8_t tac = mmu.read_byte(TAC_REG);
+//   if (!(tac & 0x4)) { // clock is disabled
+//     return;
+//   }
+//   tac &= 0x3;
+//   uint8_t tima = mmu.read_byte(TIMA_REG);
+//   uint32_t max_tima_cycles = 1024; // tac == 0 (every 1024 t-cycles or 256 m-cycles)
+//   if (tac == 1) {
+//     // 262144 hz or increment every 16 t-cycles or 4 m-cycles
+//     max_tima_cycles = 16;
+//   }
+//   else if (tac == 2) {
+//     // 65536 hz or increment every 64 t-cycles or 16 m-cycles
+//     max_tima_cycles = 64;
+//   }
+//   else {
+//     // 16384 hz of increment every 256 t-cycles or 64 m-cycles
+//     max_tima_cycles = 256;
+//   }
+//   tima_cycles += cycles;
+//   while (tima_cycles >= max_tima_cycles) {
+//     tima_cycles -= max_tima_cycles;
+//     if (tima == 0xFF) {
+//       mmu.write_byte(TIMA_REG, mmu.read_byte(TMA_REG));
+//       mmu.request_interrupt(TIMER_INTER);
+//     }
+//     else {
+//       mmu.write_byte(TIMA_REG, tima + 1);
+//     }
+//   }
+// }
 
 uint8_t Cpu::fetch_and_execute() {
   instr_cycles = 0;

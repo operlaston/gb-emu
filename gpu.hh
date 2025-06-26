@@ -29,6 +29,13 @@ typedef enum {
   LYC_INT = 6
 } LCD_STAT_BIT;
 
+typedef struct {
+  int16_t x;
+  int16_t y;
+  uint8_t tile_index;
+  uint8_t flags;
+} sprite_t;
+
 #define TILE_DATA_LENGTH (0x1000)
 #define MODE_2_CYCLES (80) // t-cycles
 #define MODE_3_CYCLES (172)
@@ -40,6 +47,7 @@ typedef enum {
 #define SCALE_FACTOR (3)
 
 class Gpu {
+
   Memory& mmu;
   uint16_t mode_clock;
   bool win_enable;
@@ -51,17 +59,22 @@ class Gpu {
   uint16_t bg_tile_map_base;
   uint16_t tile_data_base;
   uint8_t sprite_height;
-  uint8_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
-  uint8_t num_sprites;
+  // uint8_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
+
+  // registers
   uint8_t scx;
   uint8_t scy;
   uint8_t wy;
   uint8_t wx;
-  uint8_t curr_x; // relative to scx so curr_x = 0 means scx + x
+
+  // local to the ppu
+  uint8_t x_pos; // relative to scx so curr_x = 0 means scx + 0
+  uint8_t win_line;
 
   bool get_lcdc_bit(LCD_CONTROL_BIT);
   bool get_stat_bit(LCD_STAT_BIT);
   void draw_tile_line(uint8_t);
+  void draw_win_tile_line(uint8_t);
   void draw_sprite_tile_line(int16_t, int16_t, int16_t, uint8_t, uint8_t);
   void set_draw_color(uint8_t);
   void set_lcdc_status();
