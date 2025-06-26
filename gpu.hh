@@ -63,6 +63,7 @@ class Gpu {
   // uint8_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
 
   // registers
+  uint8_t curr_line;
   uint8_t scx;
   uint8_t scy;
   uint8_t wy;
@@ -74,10 +75,14 @@ class Gpu {
 
   bool get_lcdc_bit(LCD_CONTROL_BIT);
   bool get_stat_bit(LCD_STAT_BIT);
-  void draw_bg_pixel(uint8_t curr_line, uint8_t palette);
-  void draw_win_pixel(uint8_t curr_line, uint8_t palette);
-  void draw_pixel(uint8_t palette, uint8_t x, uint8_t y, uint16_t tile_addr, uint8_t curr_line);
+  void draw_bg_pixel(uint8_t palette);
+  void draw_win_pixel(uint8_t palette);
+  void draw_pixel(uint8_t palette, uint8_t x, uint8_t y, uint16_t tile_addr);
   uint16_t get_tile_addr(uint8_t x, uint8_t y, uint16_t tile_map_base);
+  void draw_sprites();
+  void draw_sprite(sprite_t sprite);
+  void draw_sprite_pixel(uint8_t palette, uint8_t sprite_x, uint8_t sprite_y, 
+                          uint8_t pos_x, uint8_t pos_y, uint16_t tile_addr);
   void draw_sprite_tile_line(int16_t, int16_t, int16_t, uint8_t, uint8_t);
   void set_draw_color(uint8_t);
   void set_lcdc_status();

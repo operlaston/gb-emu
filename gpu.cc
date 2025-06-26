@@ -83,7 +83,7 @@ void Gpu::set_mode(uint8_t mode) {
   mmu.write_byte(LCD_STATUS, mmu.read_byte(LCD_STATUS) | mode);
 }
 
-void Gpu::draw_bg_pixel(uint8_t curr_line, uint8_t palette) {
+void Gpu::draw_bg_pixel(uint8_t palette) {
   uint16_t tile_map_base = bg_tile_map_base;
 
   // retrieve the tile address
@@ -91,59 +91,42 @@ void Gpu::draw_bg_pixel(uint8_t curr_line, uint8_t palette) {
   uint8_t pixel_y = (curr_line + scy) & 0xFF;
   uint16_t tile_addr = get_tile_addr(pixel_x, pixel_y, tile_map_base);
 
-  // retrieve tile data
-  // uint8_t tile_px = pixel_x & 0x7; // get the pixel x offset within the tile, same as % 8
-  // uint8_t tile_py = pixel_y & 0x7; // get the pixel y offset within the tile, same as % 8
-  // uint8_t byte1 = mmu.read_byte(tile_addr + (tile_py * 2)); // apply the y offset to get the correct line 
-  // uint8_t byte2 = mmu.read_byte(tile_addr + (tile_py * 2) + 1); // each line in the tile is 2 bytes 
-
   // draw the pixel
-  draw_pixel(palette, pixel_x, pixel_y, tile_addr, curr_line);
-
+  draw_pixel(palette, pixel_x, pixel_y, tile_addr);
 }
 
-void Gpu::draw_win_pixel(uint8_t curr_line, uint8_t palette) {
+void Gpu::draw_win_pixel(uint8_t palette) {
   uint16_t tile_map_base = win_tile_map_base;
 
   // retrieve the tile address
   uint8_t win_x = x_pos - (wx - 7);
   uint16_t tile_addr = get_tile_addr(win_x, win_line, tile_map_base);
-
-  // retrieve tile data
-  // uint8_t tile_px = win_x & 0x7; // get the pixel x offset within the tile, same as % 8
-  // uint8_t tile_py = win_line & 0x7; // get the pixel y offset within the tile, same as % 8
-  // uint8_t byte1 = mmu.read_byte(tile_addr + (tile_py * 2)); // apply the y offset to get the correct line 
-  // uint8_t byte2 = mmu.read_byte(tile_addr + (tile_py * 2) + 1); // each line in the tile is 2 bytes
   
   // draw the pixel
-  //draw_pixel(palette, byte1, byte2, tile_px, curr_line);
-  draw_pixel(palette, win_x, win_line, tile_addr, curr_line);
+  draw_pixel(palette, win_x, win_line, tile_addr);
 }
 
 uint16_t Gpu::get_tile_addr(uint8_t x, uint8_t y, uint16_t tile_map_base) {
-  uint8_t tile_x = x / 8; // int divide by 8 to get tile x,y
-  uint8_t tile_y = y / 8;
-  uint16_t tile_index_addr = tile_map_base + (tile_y * 32) + tile_x; // each row is 32 tiles
+  uint8_t tile_x = x >> 3; // int divide by 8 to get tile x,y
+  uint8_t tile_y = y >> 3;
+  uint16_t tile_index_addr = tile_map_base + (tile_y << 5) + tile_x; // each row is 32 tiles
   uint8_t tile_index = mmu.read_byte(tile_index_addr);
 
   // find the location of tile data using the tile index
-  uint16_t tile_addr = tile_data_base + (tile_index * 16); // each tile is 16 bytes
+  uint16_t tile_addr = tile_data_base + (tile_index << 4); // each tile is 16 bytes
   if (tile_data_base == 0x9000) 
-    tile_addr = tile_data_base + (((int8_t)tile_index) * 16);
+    tile_addr = tile_data_base + (((int8_t)tile_index) << 4);
   return tile_addr;
 }
 
 void Gpu::draw_pixel(uint8_t palette, uint8_t x, uint8_t y,
-                     uint16_t tile_addr, uint8_t curr_line) {
-  // uint8_t tile_px = win_x & 0x7; // get the pixel x offset within the tile, same as % 8
-  // uint8_t tile_py = win_line & 0x7; // get the pixel y offset within the tile, same as % 8
-  uint8_t byte1 = mmu.read_byte(tile_addr + ((y & 0x7) * 2)); // apply the y offset to get the correct line 
-  uint8_t byte2 = mmu.read_byte(tile_addr + ((y & 0x7) * 2) + 1); // each line in the tile is 2 bytes
+                     uint16_t tile_addr) {
+  uint8_t byte1 = mmu.read_byte(tile_addr + ((y & 0x7) << 1)); // apply the y offset to get the correct line 
+  uint8_t byte2 = mmu.read_byte(tile_addr + ((y & 0x7) << 1) + 1); // each line in the tile is 2 bytes
   
   uint8_t bit = 7 - (x & 0x7);
   uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
-  // uint8_t palette = mmu.read_byte(0xFF47);
-  uint8_t color = (palette >> (color_id * 2)) & 0x3; // extract the color from the palette
+  uint8_t color = (palette >> (color_id << 1)) & 0x3; // extract the color from the palette
   screen[curr_line][x_pos++] = color; 
 }
 
@@ -195,13 +178,84 @@ void Gpu::draw_sprite_tile_line(int16_t signed_curr_line, int16_t sprite_x,
   }
 }
 
+// sprite_x is the pixel to draw's x position relative to the tile (affected by x flip)
+// pos_x is the x position where the pixel will be drawn relative to the screen (unaffected by x flip)
+void Gpu::draw_sprite_pixel(uint8_t palette, uint8_t draw_x, uint8_t draw_y, 
+                            uint8_t pos_x, uint8_t pos_y, uint16_t tile_addr) {
+  uint8_t byte1 = mmu.read_byte(tile_addr + (draw_y << 1)); // apply the y offset to get the correct line 
+  uint8_t byte2 = mmu.read_byte(tile_addr + (draw_y << 1) + 1); // each line in the tile is 2 bytes
+  
+  uint8_t bit = 7 - draw_x;
+  uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
+  if (color_id == 0) {
+    return;
+  }
+  uint8_t color = (palette >> (color_id << 1)) & 0x3; // extract the color from the palette
+  screen[pos_y][pos_x] = color;   
+}
+
+void Gpu::draw_sprite(sprite_t sprite) {
+  if (sprite_height == 16) {
+    if (curr_line - sprite.y >= 8) {
+      sprite.tile_index |= 1;
+    }
+    else {
+      sprite.tile_index &= ~1;
+    }
+  }
+  uint16_t tile_addr = 0x8000 + (sprite.tile_index << 4); // each tile is 16 bytes
+  
+  bool y_flip = (sprite.flags >> 6) & 1;
+  bool x_flip = (sprite.flags >> 5) & 1;
+  bool obp1 = (sprite.flags >> 4) & 1;
+  bool bg_priority = (sprite.flags >> 7) & 1;
+  uint8_t palette = mmu.read_byte(0xFF48); // OBP0 register
+  if (obp1)
+    palette = mmu.read_byte(0xFF49); // OBP1 register
+
+  for (int i = 0; i < 8; i++) {
+    if (sprite.x + i >= SCREEN_WIDTH) break;
+    if (sprite.x + i < 0) continue;
+    uint8_t draw_x = i;
+    if (x_flip) draw_x = 7 - draw_x;
+    uint8_t draw_y = curr_line - sprite.y;
+    if (y_flip) draw_y = sprite_height - draw_y - 1;
+    if (!screen[curr_line][sprite.x + i] || !bg_priority) {
+      draw_sprite_pixel(palette, draw_x, draw_y, sprite.x + i, curr_line, tile_addr);
+    }
+  }
+}
+
+void Gpu::draw_sprites() {
+  sprite_t sprites[10];
+  uint8_t num_sprites = 0;
+  for (int i = 0; i < 40 && num_sprites < 10; i++) { // there are 40 sprites
+    uint16_t addr = OAM_START + (i * 4);
+    int16_t x = mmu.read_byte(addr + 1) - 8;
+    int16_t y = mmu.read_byte(addr) - 16;
+    int16_t ly_signed = curr_line & 0x00FF;
+    if (ly_signed >= y && ly_signed < y + sprite_height) {
+      sprite_t sprite = {
+        y,
+        x,
+        mmu.read_byte(addr + 2), // tile index
+        mmu.read_byte(addr + 3), // flags
+      };
+      sprites[num_sprites++] = sprite;
+    }
+  }
+  for (int i = num_sprites - 1; i >= 0; i--) {
+    draw_sprite(sprites[i]);
+  }
+}
+
 void Gpu::draw_line() {
   set_lcdc_status();
   wy = mmu.read_byte(WIN_Y);
   wx = mmu.read_byte(WIN_X);
   scy = mmu.read_byte(SCY);
   scx = mmu.read_byte(SCX);
-  uint8_t curr_line = mmu.read_byte(LY);
+  curr_line = mmu.read_byte(LY);
 
   if (!lcd_enable) {
     set_mode(2);
@@ -210,19 +264,25 @@ void Gpu::draw_line() {
 
   if (bg_win_enable) {
     uint8_t palette = mmu.read_byte(0xFF47);
-    x_pos = 0;
+
     // draw bg
+    x_pos = 0;
     while (x_pos < 160) { 
-      draw_bg_pixel(curr_line, palette);
+      draw_bg_pixel(palette);
     }
-    x_pos = wx < 7 ? 0 : (wx - 7);
+
     // draw window
+    x_pos = wx < 7 ? 0 : (wx - 7);
     if (win_enable && win_line_enable && wx < 167) {
       while (x_pos < 160) {
-        draw_win_pixel(curr_line, palette);
+        draw_win_pixel(palette);
       }
       win_line++;
     }
+  }
+
+  if (sprite_enable) {
+    draw_sprites();
   }
 
   // if (sprite_enable) {
