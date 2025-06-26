@@ -86,64 +86,38 @@ void Gpu::set_mode(uint8_t mode) {
 void Gpu::draw_bg_pixel(uint8_t curr_line, uint8_t palette) {
   uint16_t tile_map_base = bg_tile_map_base;
 
-  // retrieve the tile index
+  // retrieve the tile address
   uint8_t pixel_x = (x_pos + scx) & 0xFF; // & 0xFF allows wrapping
   uint8_t pixel_y = (curr_line + scy) & 0xFF;
-  // uint8_t tile_x = pixel_x / 8; // int divide by 8 to get tile x,y
-  // uint8_t tile_y = pixel_y / 8;
-  // uint16_t tile_index_addr = tile_map + (tile_y * 32) + tile_x; // each row is 32 tiles
-  // uint8_t tile_index = mmu.read_byte(tile_index_addr);
-  //
-  // // find the location of tile data using the tile index
-  // uint16_t tile_addr = tile_data_base + (tile_index * 16); // each tile is 16 bytes
-  // if (tile_data_base == 0x9000) tile_addr = tile_data_base + ((int8_t)tile_index * 16);
   uint16_t tile_addr = get_tile_addr(pixel_x, pixel_y, tile_map_base);
 
   // retrieve tile data
-  uint8_t tile_px = pixel_x & 0x7; // get the pixel x offset within the tile, same as % 8
-  uint8_t tile_py = pixel_y & 0x7; // get the pixel y offset within the tile, same as % 8
-  uint8_t byte1 = mmu.read_byte(tile_addr + (tile_py * 2)); // apply the y offset to get the correct line 
-  uint8_t byte2 = mmu.read_byte(tile_addr + (tile_py * 2) + 1); // each line in the tile is 2 bytes 
+  // uint8_t tile_px = pixel_x & 0x7; // get the pixel x offset within the tile, same as % 8
+  // uint8_t tile_py = pixel_y & 0x7; // get the pixel y offset within the tile, same as % 8
+  // uint8_t byte1 = mmu.read_byte(tile_addr + (tile_py * 2)); // apply the y offset to get the correct line 
+  // uint8_t byte2 = mmu.read_byte(tile_addr + (tile_py * 2) + 1); // each line in the tile is 2 bytes 
 
   // draw the pixel
-  // uint8_t bit = 7 - tile_px;
-  // uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
-  // // uint8_t palette = mmu.read_byte(0xFF47);
-  // uint8_t color = (palette >> (color_id * 2)) & 0x3; // extract the color from the palette
-  // screen[curr_line][x_pos++] = color;
-  draw_pixel(palette, byte1, byte2, tile_px, curr_line);
+  draw_pixel(palette, pixel_x, pixel_y, tile_addr, curr_line);
 
 }
 
 void Gpu::draw_win_pixel(uint8_t curr_line, uint8_t palette) {
   uint16_t tile_map_base = win_tile_map_base;
 
-  // retrieve the tile index
+  // retrieve the tile address
   uint8_t win_x = x_pos - (wx - 7);
-
-  // uint8_t tile_x = win_x / 8; // int divide by 8 to get tile x,y
-  // uint8_t tile_y = win_line / 8;
-  // uint16_t tile_index_addr = tile_map + (tile_y * 32) + tile_x; // each row is 32 tiles
-  // uint8_t tile_index = mmu.read_byte(tile_index_addr);
-  //
-  // // find the location of tile data using the tile index
-  // uint16_t tile_addr = tile_data_base + (tile_index * 16); // each tile is 16 bytes
-  // if (tile_data_base == 0x9000) tile_addr = tile_data_base + (((int8_t)tile_index) * 16);
   uint16_t tile_addr = get_tile_addr(win_x, win_line, tile_map_base);
 
   // retrieve tile data
-  uint8_t tile_px = win_x & 0x7; // get the pixel x offset within the tile, same as % 8
-  uint8_t tile_py = win_line & 0x7; // get the pixel y offset within the tile, same as % 8
-  uint8_t byte1 = mmu.read_byte(tile_addr + (tile_py * 2)); // apply the y offset to get the correct line 
-  uint8_t byte2 = mmu.read_byte(tile_addr + (tile_py * 2) + 1); // each line in the tile is 2 bytes
+  // uint8_t tile_px = win_x & 0x7; // get the pixel x offset within the tile, same as % 8
+  // uint8_t tile_py = win_line & 0x7; // get the pixel y offset within the tile, same as % 8
+  // uint8_t byte1 = mmu.read_byte(tile_addr + (tile_py * 2)); // apply the y offset to get the correct line 
+  // uint8_t byte2 = mmu.read_byte(tile_addr + (tile_py * 2) + 1); // each line in the tile is 2 bytes
   
   // draw the pixel
-  // uint8_t bit = 7 - tile_px;
-  // uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
-  // // uint8_t palette = mmu.read_byte(0xFF47);
-  // uint8_t color = (palette >> (color_id * 2)) & 0x3; // extract the color from the palette
-  // screen[curr_line][x_pos++] = color;
-  draw_pixel(palette, byte1, byte2, tile_px, curr_line);
+  //draw_pixel(palette, byte1, byte2, tile_px, curr_line);
+  draw_pixel(palette, win_x, win_line, tile_addr, curr_line);
 }
 
 uint16_t Gpu::get_tile_addr(uint8_t x, uint8_t y, uint16_t tile_map_base) {
@@ -159,9 +133,14 @@ uint16_t Gpu::get_tile_addr(uint8_t x, uint8_t y, uint16_t tile_map_base) {
   return tile_addr;
 }
 
-void Gpu::draw_pixel(uint8_t palette, uint8_t byte1, uint8_t byte2,
-                     uint8_t tile_px, uint8_t curr_line) {
-  uint8_t bit = 7 - tile_px;
+void Gpu::draw_pixel(uint8_t palette, uint8_t x, uint8_t y,
+                     uint16_t tile_addr, uint8_t curr_line) {
+  // uint8_t tile_px = win_x & 0x7; // get the pixel x offset within the tile, same as % 8
+  // uint8_t tile_py = win_line & 0x7; // get the pixel y offset within the tile, same as % 8
+  uint8_t byte1 = mmu.read_byte(tile_addr + ((y & 0x7) * 2)); // apply the y offset to get the correct line 
+  uint8_t byte2 = mmu.read_byte(tile_addr + ((y & 0x7) * 2) + 1); // each line in the tile is 2 bytes
+  
+  uint8_t bit = 7 - (x & 0x7);
   uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
   // uint8_t palette = mmu.read_byte(0xFF47);
   uint8_t color = (palette >> (color_id * 2)) & 0x3; // extract the color from the palette

@@ -76,7 +76,7 @@ class Gpu {
   bool get_stat_bit(LCD_STAT_BIT);
   void draw_bg_pixel(uint8_t curr_line, uint8_t palette);
   void draw_win_pixel(uint8_t curr_line, uint8_t palette);
-  void draw_pixel(uint8_t palette, uint8_t, uint8_t, uint8_t, uint8_t);
+  void draw_pixel(uint8_t palette, uint8_t x, uint8_t y, uint16_t tile_addr, uint8_t curr_line);
   uint16_t get_tile_addr(uint8_t x, uint8_t y, uint16_t tile_map_base);
   void draw_sprite_tile_line(int16_t, int16_t, int16_t, uint8_t, uint8_t);
   void set_draw_color(uint8_t);
