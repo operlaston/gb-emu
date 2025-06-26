@@ -6,6 +6,10 @@
 
 using namespace std;
 
+static unsigned char mem[0x10000];
+static unsigned char cart[0x200000];
+static unsigned char ram_banks[0x8000]; // a ram bank is 0x2000 in size and there are 4 max
+
 Memory::Memory(char *rom_path){
 
   FILE *rom_fp = fopen(rom_path, "rb"); // open in read binary mode

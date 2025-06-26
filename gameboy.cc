@@ -19,14 +19,14 @@ void Gameboy::update() {
   // max cycles per frame (59.7275 frames per second)
   const int CYCLES_PER_FRAME = CYCLES_PER_SECOND / 59.7275;
   int cycles_this_update = 0;
+  uint8_t interrupt_cycles = 0;
   while (cycles_this_update < CYCLES_PER_FRAME) {
     // perform a cycle
-    uint8_t cycles = 0;
+    uint8_t cycles = interrupt_cycles;
     if (cpu.state == RUNNING) cycles = cpu.fetch_and_execute();
     else if (cpu.state == HALTED) cycles = 1;
     cycles_this_update += cycles;
     // update timers
-    // cpu.update_timers(cycles);
     for (int i = 0; i < cycles; i++) {
       // update_timers
       timer.tick();
@@ -34,7 +34,13 @@ void Gameboy::update() {
     // update graphics
     gpu.step(cycles);
     // do interrupts
-    cpu.service_interrupt();
+    if (cpu.service_interrupt()) {
+      // an interrupt takes 5 m-cycles
+      interrupt_cycles = 20;
+    }
+    else {
+      interrupt_cycles = 0;
+    }
   }
   // render the screen
   gpu.render();

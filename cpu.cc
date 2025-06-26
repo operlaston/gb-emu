@@ -137,7 +137,7 @@ bool Cpu::get_flag(int flagbit) {
   return read_r8(REG_F) & mask;
 }
 
-void Cpu::service_interrupt() {
+bool Cpu::service_interrupt() {
   // IE (interrupt enable): 0xFFFF
   // IF (interrupt flag/requested): 0xFF0F
 
@@ -148,7 +148,7 @@ void Cpu::service_interrupt() {
   }
 
   if (!ime) {
-    return;
+    return false;
   }
 
   uint16_t interrupt_address = 0;
@@ -179,13 +179,14 @@ void Cpu::service_interrupt() {
     }
   }
 
-  if (interrupt_address == 0) return;
+  if (interrupt_address == 0) return false;
   mmu.write_byte(--sp, pc >> 8);
   mmu.write_byte(--sp, pc & 0xFF);
   
   pc = interrupt_address;
   uint8_t mask = 1 << interrupt_type;
   mmu.write_byte(IF_REG, if_reg & ~mask);
+  return true;
 }
 
 // void Cpu::update_timers(uint8_t cycles) {

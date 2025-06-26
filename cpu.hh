@@ -246,7 +246,7 @@ public:
   CPU_STATE state;
   // void update_timers(uint8_t);
   // interrupt handling
-  void service_interrupt();
+  bool service_interrupt();
 };
 
 #endif

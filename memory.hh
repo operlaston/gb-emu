@@ -13,9 +13,6 @@ class Timer;
 
 class Memory {
 private:
-  unsigned char mem[0x10000];
-  unsigned char cart[0x200000];
-  unsigned char ram_banks[0x8000]; // a ram bank is 0x2000 in size and there are 4 max
   unsigned char num_rom_banks; // rom banks are 16KiB in size
   unsigned char num_ram_banks; // ram banks are 8KiB in size
   enum banking_types rom_banking_type;
