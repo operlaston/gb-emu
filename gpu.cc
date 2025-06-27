@@ -270,16 +270,16 @@ void Gpu::step(uint8_t cycles) {
         mmu.inc_scanline();
         if (mmu.read_byte(LY) == SCREEN_HEIGHT) {
           mmu.request_interrupt(VBLANK_INTER);
+          set_mode(1); 
           if (get_stat_bit(MODE_1)) {
             mmu.request_interrupt(STAT_INTER);
           }
-          set_mode(1); 
         }
         else {
+          set_mode(2);
           if (get_stat_bit(MODE_2)) {
             mmu.request_interrupt(STAT_INTER);
           }
-          set_mode(2);
         }
         mode_clock -= MODE_0_CYCLES;
       }

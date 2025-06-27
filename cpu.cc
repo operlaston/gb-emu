@@ -231,6 +231,7 @@ bool Cpu::service_interrupt() {
 uint8_t Cpu::fetch_and_execute() {
   instr_cycles = 0;
   unsigned char opcode = mmu.read_byte(pc);
+  // print_registers();
   pc++;
   auto& opcode_function = opcode_table[opcode];
   // handle 0xCB (prefix instruction); execute prefixed instruction immediately
@@ -1266,4 +1267,19 @@ void Cpu::nop() {
 
 void Cpu::stop() {
   //TODO
+}
+
+void Cpu::print_registers() {
+  printf("A: %02X ", AF.first);
+  printf("F: %02X ", AF.second);
+  printf("B: %02X ", BC.first);
+  printf("C: %02X ", BC.second);
+  printf("D: %02X ", DE.first);
+  printf("E: %02X ", DE.second);
+  printf("H: %02X ", HL.first);
+  printf("L: %02X ", HL.second);
+  printf("SP: %04X ", sp);
+  printf("PC: %04X [%02X %02X %02X %02X]\n", pc,
+         mmu.read_byte(pc), mmu.read_byte(pc + 1), mmu.read_byte(pc + 2),
+         mmu.read_byte(pc + 3));;
 }

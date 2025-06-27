@@ -96,7 +96,8 @@ private:
   void set_flag(int, bool);
   bool get_flag(int);
 
-  // timer handling
+  // debugging
+  void print_registers();
 
   
   // load instructions

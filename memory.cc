@@ -37,14 +37,33 @@ Memory::Memory(char *rom_path){
   fclose(rom_fp);
   rom_fp = NULL;
 
-  if (cart[0x147] <= 3 && cart[0x147] >= 1) { 
-    rom_banking_type = MBC1;
-  }
-  else if (cart[0x147] == 5 || cart[0x147] == 6) { 
-    rom_banking_type = MBC2;
-  }
-  else {
-    rom_banking_type = NONE;
+  switch(cart[0x147]) {
+    case 0:
+      banking_type = NONE;
+      break;
+    case 0x1:
+      banking_type = MBC1;
+      break;
+    case 0x2:
+      banking_type = MBC1_RAM;
+      break;
+    case 0x3:
+      banking_type = MBC1_RAM_BATTERY;
+      break;
+    case 0x5:
+      banking_type = MBC2;
+      break;
+    case 0x11:
+      banking_type = MBC3;
+      break;
+    case 0x12:
+      banking_type = MBC3_RAM;
+      break;
+    case 0x13:
+      banking_type = MBC3_RAM_BATTERY;
+      break;
+    default:
+      banking_type = NONE;
   }
 
   num_rom_banks = 2 << cart[0x148];
@@ -55,19 +74,22 @@ Memory::Memory(char *rom_path){
 
   switch(cart[0x149]) {
     case 0x0:
-      num_ram_banks = 0;
+      ram_size = 0;
+      break;
+    case 0x1:
+      ram_size = 2048;
       break;
     case 0x2:
-      num_ram_banks = 1;
+      ram_size = 8192;
       break;
     case 0x3:
-      num_ram_banks = 4;
+      ram_size = 32768;
       break;
     case 0x4:
-      num_ram_banks = 16;
+      ram_size = 131072;
       break;
     case 0x5:
-      num_ram_banks = 8;
+      ram_size = 65536;
       break;
     
   }
@@ -91,6 +113,9 @@ Memory::Memory(char *rom_path){
   for (unsigned long i = 0; i < 0x8000; i++) {
     mem[i] = cart[i];
   }
+
+  // reset joypad
+  mem[0xFF00] = 0x0F;
 
   // set special rom registers
   mem[0xFF05] = 0x00;
@@ -132,8 +157,31 @@ void Memory::set_timer(Timer *t) {
   timer = t;
 }
 
+uint8_t Memory::mbc1_read(uint16_t address) const {
+  if (address <= 0x3FFF) {
+    return cart[address];
+  }
+
+  // reading from ROM bank
+  else if (address >= 0x4000 && address <= 0x7FFF) {
+    return cart[(address - 0x4000) + (curr_rom_bank * 0x4000)];
+  }
+
+  // reading from RAM bank
+  else if (address >= 0xA000 && address <= 0xBFFF) {
+    if (ram_enabled) {
+      return ram_banks[(address - 0xA000) + (curr_ram_bank * 0x2000)]; 
+    }
+    else return 0xFF;
+  }
+
+  // this statement should be unreachable in theory
+  return 0;
+}
+
 void Memory::handle_banking(unsigned short address, unsigned char data) {
-  if (rom_banking_type == MBC1) {
+  if (banking_type == MBC1 || banking_type == MBC1_RAM || 
+      banking_type == MBC1_RAM_BATTERY) {
     if (address < 0x2000) {
       unsigned char lower_bits = data & 0xF;
       if ( lower_bits == 0xA ) {
@@ -145,16 +193,33 @@ void Memory::handle_banking(unsigned short address, unsigned char data) {
     } 
     else if (address < 0x4000) {
       // TODO: rom bank change
-
+      uint8_t mask = num_rom_banks >= 32 ? 31 : num_rom_banks - 1;
+      if (data == 0) curr_rom_bank = 1;
+      else curr_rom_bank = data & mask;
     }
     else if (address < 0x6000){
       // TODO: rom or ram bank change
+      curr_ram_bank = data & 0x3;
+    }
+    else if (address < 0x8000) {
+      mode_flag = data & 1;
     }
     else {
       // TODO: do something else
+      if (ram_enabled) {
+        if(ram_size <= 8192) {
+          ram_banks[(address - 0xA000) % ram_size] = data;
+        }
+        else if (mode_flag) {
+          ram_banks[0x2000 * curr_ram_bank + (address - 0xA000)] = data;
+        }
+        else {
+          ram_banks[address - 0xA000] = data;
+        }
+      }
     }
   }
-  else if (rom_banking_type == MBC2) {
+  else if (banking_type == MBC2) {
     if ( address < 0x4000 ) {
       unsigned char lower_bits = data & 0xF;
     // The least significant bit of the upper address byte must be zero to enable/disable cart RAM
@@ -185,7 +250,7 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
   // }
 
   // 0x0000-0x7FFF is read only
-  if (address < 0x8000) {
+  if (address < 0x8000 || (address >= 0xA000 && address < 0xC000)) {
     handle_banking(address, data);
     return;
   }
@@ -235,14 +300,15 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
 unsigned char Memory::read_byte(unsigned short address) const {
   // reading from ROM bank
   if (address >= 0x4000 && address <= 0x7FFF) {
-    unsigned short offset = address - 0x4000;
-    return cart[offset + (curr_rom_bank * 0x4000)];
+    return cart[(address - 0x4000) + (curr_rom_bank * 0x4000)];
   }
 
   // reading from RAM bank
   else if (address >= 0xA000 && address <= 0xBFFF) {
-    unsigned short offset = address - 0xA000;
-    return ram_banks[offset + (curr_ram_bank * 0x2000)];
+    if (banking_type == MBC1 || banking_type == MBC1_RAM || banking_type == MBC1_RAM_BATTERY) {
+      return mbc1_read(address);
+    }
+    return ram_banks[(address - 0xA000) + (curr_ram_bank * 0x2000)];
   }
 
   else if (address >= DIV_REG && address <= TAC_REG) {

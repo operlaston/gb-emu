@@ -22,11 +22,11 @@ void Gameboy::update() {
   uint8_t interrupt_cycles = 0;
   while (cycles_this_update < CYCLES_PER_FRAME) {
     // perform a cycle
+    // uint8_t cycles = interrupt_cycles;
     uint8_t cycles = interrupt_cycles;
     if (cpu.state == RUNNING) cycles = cpu.fetch_and_execute();
-    else if (cpu.state == HALTED) cycles = 1;
+    else if (cpu.state == HALTED) cycles = 4; // 1 m-cycle
     cycles_this_update += cycles;
-    // update timers
     for (int i = 0; i < cycles; i++) {
       // update_timers
       timer.tick();

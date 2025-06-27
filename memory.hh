@@ -5,7 +5,12 @@
 
 enum banking_types {
   MBC1,
+  MBC1_RAM,
+  MBC1_RAM_BATTERY,
   MBC2,
+  MBC3,
+  MBC3_RAM,
+  MBC3_RAM_BATTERY,
   NONE
 };
 
@@ -14,10 +19,11 @@ class Timer;
 class Memory {
 private:
   unsigned char num_rom_banks; // rom banks are 16KiB in size
-  unsigned char num_ram_banks; // ram banks are 8KiB in size
-  enum banking_types rom_banking_type;
+  uint32_t ram_size;
+  enum banking_types banking_type;
   unsigned char curr_rom_bank;
   unsigned char curr_ram_bank;
+  bool mode_flag;
   bool ram_enabled;
   Timer *timer;
 
@@ -36,6 +42,7 @@ public:
   void inc_scanline();
   void check_lyc_ly();
   void set_timer(Timer *t);
+  uint8_t mbc1_read(uint16_t address) const;
 };
 
 #endif
