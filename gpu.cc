@@ -1,5 +1,6 @@
 #include "gpu.hh"
 #include "constants.hh"
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -12,7 +13,6 @@ typedef struct {
   int16_t sprite_x;
 } sprite_prio_t;
 
-sprite_prio_t sprite_line[SCREEN_WIDTH] = { {4, 0} }; // 4 is not a possible color
 uint8_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
 
 Gpu::Gpu(Memory& mem) : mmu(mem) {
@@ -74,7 +74,7 @@ void Gpu::set_lcdc_status() {
   win_tile_map_base = get_lcdc_bit(WIN_TILE_MAP) ? 0x9C00 : 0x9800;
   bg_tile_map_base = get_lcdc_bit(BG_TILE_MAP) ? 0x9C00 : 0x9800;
   tile_data_base = get_lcdc_bit(TILE_DATA) ? 0x8000 : 0x9000;
-  sprite_height = get_lcdc_bit(OBJ_SIZE) ? 8 : 16;
+  sprite_height = get_lcdc_bit(OBJ_SIZE) ? 16 : 8;
   bg_win_enable = get_lcdc_bit(BG_WIN_ENABLE) ? 1 : 0;
 }
 
@@ -130,60 +130,12 @@ void Gpu::draw_pixel(uint8_t palette, uint8_t x, uint8_t y,
   screen[curr_line][x_pos++] = color; 
 }
 
-void Gpu::draw_sprite_tile_line(int16_t signed_curr_line, int16_t sprite_x, 
-                                int16_t sprite_y, uint8_t tile_index, uint8_t flags) {
-
-  if (sprite_x <= -8 || sprite_x >= SCREEN_WIDTH) return;
-
-  uint16_t tile_addr = 0x8000 + (tile_index * 16);
-  uint8_t pixel_y_rel = (signed_curr_line - sprite_y) & 0xFF; // y value of the pixel relative to inside the tile
-  if ((flags >> 6) & 1) { // y-flip
-    pixel_y_rel = (sprite_height - 1) - pixel_y_rel;
-  }
-  uint8_t byte1 = mmu.read_byte(tile_addr + (pixel_y_rel * 2));
-  uint8_t byte2 = mmu.read_byte(tile_addr + (pixel_y_rel * 2) + 1);
-  uint8_t obj_to_bg_priority = (flags >> 7) & 1;
-  for (int i = 0; i < 8; i++) {
-    if (sprite_x + i < 0) {
-      continue;
-    }
-    uint8_t pixel_x_rel = i;
-    if ((flags >> 5) & 1) { // x-flip
-      pixel_x_rel = 7 - i;
-    }
-    uint8_t bit = 7 - pixel_x_rel;
-    uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
-    if (color_id != 0) {
-      // match color id with palette
-      uint8_t palette = mmu.read_byte(0xFF48); // OBP0 register
-      if ((flags >> 4) & 1) {
-        palette = mmu.read_byte(0xFF49);
-      }
-      uint8_t color = (palette >> (color_id * 2)) & 0x3;
-      uint8_t screen_y = (uint8_t) signed_curr_line;
-      uint8_t screen_x = sprite_x + i;
-      if (screen[screen_y][screen_x] == 0 || obj_to_bg_priority == 0) {
-        // current sprite_x is guaranteed to be lower OAM index so we just compare x vals
-        if(sprite_line[screen_x].color == 4 || sprite_x <= sprite_line[screen_x].sprite_x) {
-          screen[screen_y][screen_x] = color;
-          sprite_line[screen_x] = {color, sprite_x};
-        }
-        // even though lower priority, the higher priority sprite is transparent
-        else if (sprite_line[screen_x].color == 0) {
-          screen[screen_y][screen_x] = color;
-          sprite_line[screen_x] = {color, sprite_x};
-        }
-      }
-    }
-  }
-}
-
 // sprite_x is the pixel to draw's x position relative to the tile (affected by x flip)
 // pos_x is the x position where the pixel will be drawn relative to the screen (unaffected by x flip)
 void Gpu::draw_sprite_pixel(uint8_t palette, uint8_t draw_x, uint8_t draw_y, 
                             uint8_t pos_x, uint8_t pos_y, uint16_t tile_addr) {
-  uint8_t byte1 = mmu.read_byte(tile_addr + (draw_y << 1)); // apply the y offset to get the correct line 
-  uint8_t byte2 = mmu.read_byte(tile_addr + (draw_y << 1) + 1); // each line in the tile is 2 bytes
+  uint8_t byte1 = mmu.read_byte(tile_addr + ((draw_y & 7) << 1)); // apply the y offset to get the correct line 
+  uint8_t byte2 = mmu.read_byte(tile_addr + ((draw_y & 7) << 1) + 1); // each line in the tile is 2 bytes
   
   uint8_t bit = 7 - draw_x;
   uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
@@ -195,15 +147,6 @@ void Gpu::draw_sprite_pixel(uint8_t palette, uint8_t draw_x, uint8_t draw_y,
 }
 
 void Gpu::draw_sprite(sprite_t sprite) {
-  if (sprite_height == 16) {
-    if (curr_line - sprite.y >= 8) {
-      sprite.tile_index |= 1;
-    }
-    else {
-      sprite.tile_index &= ~1;
-    }
-  }
-  uint16_t tile_addr = 0x8000 + (sprite.tile_index << 4); // each tile is 16 bytes
   
   bool y_flip = (sprite.flags >> 6) & 1;
   bool x_flip = (sprite.flags >> 5) & 1;
@@ -212,15 +155,26 @@ void Gpu::draw_sprite(sprite_t sprite) {
   uint8_t palette = mmu.read_byte(0xFF48); // OBP0 register
   if (obp1)
     palette = mmu.read_byte(0xFF49); // OBP1 register
+  
+  uint8_t draw_y = curr_line - sprite.y;
+  if (y_flip) draw_y = sprite_height - draw_y - 1;
+
+  if (sprite_height == 16) {
+    if (draw_y >= 8) {
+      sprite.tile_index |= 1;
+    }
+    else {
+      sprite.tile_index &= 0xFE;
+    }
+  }
+  uint16_t tile_addr = 0x8000 + (sprite.tile_index << 4); // each tile is 16 bytes
 
   for (int i = 0; i < 8; i++) {
     if (sprite.x + i >= SCREEN_WIDTH) break;
     if (sprite.x + i < 0) continue;
     uint8_t draw_x = i;
     if (x_flip) draw_x = 7 - draw_x;
-    uint8_t draw_y = curr_line - sprite.y;
-    if (y_flip) draw_y = sprite_height - draw_y - 1;
-    if (!screen[curr_line][sprite.x + i] || !bg_priority) {
+    if (screen[curr_line][sprite.x + i] == 0 || bg_priority == 0) {
       draw_sprite_pixel(palette, draw_x, draw_y, sprite.x + i, curr_line, tile_addr);
     }
   }
@@ -229,21 +183,24 @@ void Gpu::draw_sprite(sprite_t sprite) {
 void Gpu::draw_sprites() {
   sprite_t sprites[10];
   uint8_t num_sprites = 0;
-  for (int i = 0; i < 40 && num_sprites < 10; i++) { // there are 40 sprites
+  for (uint8_t i = 0; i < 40 && num_sprites < 10; i++) { // there are 40 sprites
     uint16_t addr = OAM_START + (i * 4);
     int16_t x = mmu.read_byte(addr + 1) - 8;
     int16_t y = mmu.read_byte(addr) - 16;
     int16_t ly_signed = curr_line & 0x00FF;
     if (ly_signed >= y && ly_signed < y + sprite_height) {
       sprite_t sprite = {
-        y,
         x,
+        y,
         mmu.read_byte(addr + 2), // tile index
         mmu.read_byte(addr + 3), // flags
       };
       sprites[num_sprites++] = sprite;
     }
   }
+  stable_sort(begin(sprites), begin(sprites) + num_sprites, [](const sprite_t& a, const sprite_t& b) {
+    return a.x < b.x;
+  });
   for (int i = num_sprites - 1; i >= 0; i--) {
     draw_sprite(sprites[i]);
   }
@@ -284,45 +241,6 @@ void Gpu::draw_line() {
   if (sprite_enable) {
     draw_sprites();
   }
-
-  // if (sprite_enable) {
-  //   // draw sprites
-  //   int num_sprites = 0;
-  //   sprite_t sprites[10];
-  //   int16_t signed_curr_line = (int16_t) curr_line;
-  //   for (int i = OAM_START; i <= OAM_END && num_sprites < 10; i += 4) {
-  //     // retrieve sprite x and y and perform checks to see if they
-  //     // fit on the current scan line
-  //     int16_t sprite_y = mmu.read_byte(i);
-  //     sprite_y -= 16;
-  //     if (sprite_y + sprite_height <= 0) continue;
-  //     int16_t sprite_y_end = sprite_y + sprite_height - 1;
-  //     if (sprite_y > signed_curr_line || sprite_y_end < signed_curr_line) continue;
-  //     int16_t sprite_x = mmu.read_byte(i + 1);
-  //     sprite_x -= 8;
-  //     // if (sprite_x <= -8 || sprite_x >= SCREEN_WIDTH) continue;
-  //
-  //     uint8_t tile_index = mmu.read_byte(i + 2);
-  //     if (sprite_height == 16) {
-  //       tile_index &= 0xFE;
-  //     }
-  //     uint8_t flags = mmu.read_byte(i + 3);
-  //     sprite_t sprite = {
-  //       sprite_x,
-  //       sprite_y,
-  //       tile_index,
-  //       flags,
-  //     };
-  //     sprites[num_sprites++] = sprite;
-  //     //draw_sprite_tile_line(signed_curr_line, sprite_x, sprite_y, tile_index, flags);
-  //   }
-  //
-  //   for (int i = num_sprites - 1; i >= 0; i--) {
-  //     sprite_t sprite = sprites[i];
-  //     draw_sprite_tile_line(signed_curr_line, sprite.x, sprite.y, sprite.tile_index,
-  //                           sprite.flags);
-  //   }
-  // }
 }
 
 void Gpu::step(uint8_t cycles) {
