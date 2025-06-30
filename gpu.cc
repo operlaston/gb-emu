@@ -34,7 +34,6 @@ Gpu::Gpu(Memory& mem) : mmu(mem) {
   x_pos = 0;
   win_line = 0;
 
-  // TODO: initialize an sdl window
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) < 0) {
     SDL_Log("Could not initialize SDL: %s\n", SDL_GetError());
     exit(1);
@@ -215,7 +214,8 @@ void Gpu::draw_line() {
   curr_line = mmu.read_byte(LY);
 
   if (!lcd_enable) {
-    set_mode(2);
+    set_mode(0);
+    mmu.reset_lcd_status();
     return;
   }
 
@@ -332,3 +332,4 @@ void Gpu::render() {
   }
   SDL_RenderPresent(renderer);
 }
+

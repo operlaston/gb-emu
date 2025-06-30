@@ -5,6 +5,7 @@
 #include "memory.hh"
 #include "gpu.hh"
 #include "timer.hh"
+#include "joypad.hh"
 
 class Gameboy {
 
@@ -12,10 +13,12 @@ class Gameboy {
   Cpu cpu;
   Gpu gpu;
   Timer timer;
+  Joypad joypad;
 
 public:
   Gameboy(char *rom_path);
   // default destructor
+  void start();
   void update();
 };
 

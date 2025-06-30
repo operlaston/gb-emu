@@ -15,6 +15,8 @@ enum banking_types {
 };
 
 class Timer;
+class Joypad;
+class Gpu;
 
 class Memory {
 private:
@@ -26,9 +28,11 @@ private:
   bool mode_flag;
   bool ram_enabled;
   Timer *timer;
+  Joypad *joypad;
 
   void handle_banking(unsigned short address, unsigned char data);
   void dma_transfer(uint8_t);
+  bool is_lcd_enabled() const;
 
 public:
   Memory(char *rom_path);
@@ -39,10 +43,12 @@ public:
   unsigned short read_word(unsigned short address) const;
   void request_interrupt(uint8_t);
   void reset_scanline();
+  void reset_lcd_status();
   void inc_scanline();
   void check_lyc_ly();
-  void set_timer(Timer *t);
   uint8_t mbc1_read(uint16_t address) const;
+  void set_timer(Timer *t);
+  void set_joypad(Joypad *j);
 };
 
 #endif

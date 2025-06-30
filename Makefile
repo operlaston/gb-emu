@@ -1,7 +1,7 @@
 CC = g++
 CCFLAGS = -g -Wall -Wextra -std=c++17 -O2 -I/usr/local/include
 LDFLAGS = -L/usr/local/lib -lSDL2
-OBJ = main.o gameboy.o cpu.o cpu_table.o memory.o gpu.o timer.o
+OBJ = main.o gameboy.o cpu.o cpu_table.o memory.o gpu.o timer.o joypad.o
 TARGET = gameboy
 
 gameboy: $(OBJ)
@@ -27,6 +27,9 @@ gpu.o: gpu.cc
 
 timer.o: timer.cc
 	$(CC) $(CCFLAGS) -c timer.cc
+
+joypad.o: joypad.cc
+	$(CC) $(CCFLAGS) -c joypad.cc
 
 clean:
 	rm -f *.o $(TARGET)

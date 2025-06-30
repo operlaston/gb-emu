@@ -1,18 +1,24 @@
 #include "gameboy.hh"
+#include "SDL2/SDL_stdinc.h"
 #include "constants.hh"
-// #include <SDL2/SDL.h>
-// #include <SDL2/SDL_error.h>
-// #include <SDL2/SDL_render.h>
-// #include <SDL2/SDL_timer.h>
-// #include <SDL2/SDL_video.h>
+#include <SDL2/SDL_timer.h>
 
 Gameboy::Gameboy(char *rom_path)
   : mmu(rom_path),
     cpu(mmu),
     gpu(mmu),
-    timer(mmu){
+    timer(mmu),
+    joypad(mmu){
   mmu.set_timer(&timer);
+  mmu.set_joypad(&joypad);
   printf("completed initalization\n");
+}
+
+void Gameboy::start() {
+  while (!joypad.quit) {
+    joypad.handle_input();
+    update();
+  }
 }
 
 void Gameboy::update() {
@@ -20,6 +26,9 @@ void Gameboy::update() {
   const int CYCLES_PER_FRAME = CYCLES_PER_SECOND / 59.7275;
   int cycles_this_update = 0;
   uint8_t interrupt_cycles = 0;
+
+  const uint64_t start_time = SDL_GetPerformanceCounter(); 
+
   while (cycles_this_update < CYCLES_PER_FRAME) {
     // perform a cycle
     // uint8_t cycles = interrupt_cycles;
@@ -42,6 +51,15 @@ void Gameboy::update() {
       interrupt_cycles = 0;
     }
   }
+
   // render the screen
   gpu.render();
+
+  const uint64_t end_time = SDL_GetPerformanceCounter();
+  const double time_spent = (double)((end_time - start_time) * 1000) / 
+                              SDL_GetPerformanceFrequency(); // time spent in milliseconds
+  double delay = 16.7427 - time_spent;
+  if (delay > 1.0) {
+    SDL_Delay((Uint32) delay);
+  }
 }

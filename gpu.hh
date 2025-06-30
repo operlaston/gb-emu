@@ -98,6 +98,7 @@ public:
   // use default destructor
   void step(uint8_t);
   void render();
+  bool is_lcd_enabled();
 };
 
 #endif

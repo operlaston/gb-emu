@@ -1,8 +1,11 @@
 #include "memory.hh"
 #include "constants.hh"
+#include "gpu.hh"
 #include "timer.hh"
+#include "joypad.hh"
 #include <cstdio>
 #include <iostream>
+#include <istream>
 
 using namespace std;
 
@@ -40,9 +43,11 @@ Memory::Memory(char *rom_path){
   switch(cart[0x147]) {
     case 0:
       banking_type = NONE;
+      printf("No memory banking\n");
       break;
     case 0x1:
       banking_type = MBC1;
+      printf("MBC1\n");
       break;
     case 0x2:
       banking_type = MBC1_RAM;
@@ -157,6 +162,10 @@ void Memory::set_timer(Timer *t) {
   timer = t;
 }
 
+void Memory::set_joypad(Joypad *j) {
+  joypad = j;
+}
+
 uint8_t Memory::mbc1_read(uint16_t address) const {
   if (address <= 0x3FFF) {
     return cart[address];
@@ -248,6 +257,15 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
   //   fflush(stdout);
   //   data &= ~0x80;
   // }
+  //
+  // if (address == 0xFFFF) {
+  //   printf("IE flag is: %d\n", mem[address]);
+  //   printf("Setting IE flag to: %d\n", data);
+  // }
+  // if (address == 0xFF0F) {
+  //   printf("IF flag is: %d\n", mem[address]);
+  //   printf("Setting IF flag to: %d\n", data);
+  // }
 
   // 0x0000-0x7FFF is read only
   if (address < 0x8000 || (address >= 0xA000 && address < 0xC000)) {
@@ -270,6 +288,10 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
   // this memory is not usable
   else if (address >= 0xFEA0 && address <= 0xFEFF) {
     return;
+  }
+
+  else if (address == 0xFF00) { // joypad register
+    joypad->set_joypad_state(data);
   }
 
   else if (address >= DIV_REG && address <= TAC_REG) {
@@ -315,6 +337,17 @@ unsigned char Memory::read_byte(unsigned short address) const {
     return timer->timer_read(address);
   }
 
+  else if (address == 0xFF00) { // JOYPAD REGISTER
+    // printf("read %d from joypad\n", joypad->get_joypad_state());
+    // mem[0xFF00] = joypad->get_joypad_state();
+    return joypad->get_joypad_state();
+  }
+
+  else if (address == LCD_STATUS) {
+    // return 0;
+    return is_lcd_enabled() ? mem[LCD_STATUS] : 0;
+  }
+
   return mem[address];
 }
 
@@ -328,7 +361,7 @@ unsigned short Memory::read_word(unsigned short address) const {
 void Memory::request_interrupt(uint8_t bit) {
   // IE (interrupt enable): 0xFFFF
   // IF (interrupt flag/requested): 0xFF0F
-
+  // printf("requested %d\n", bit);
   write_byte(IF_REG, read_byte(IF_REG) | (1 << bit));
 }
 
@@ -357,4 +390,12 @@ void Memory::dma_transfer(uint8_t data) {
     mem[i] = mem[xfer_i];
     xfer_i++;
   }
+}
+
+void Memory::reset_lcd_status() {
+  mem[LCD_STATUS] = 0;
+}
+
+bool Memory::is_lcd_enabled() const {
+  return (mem[LCD_STATUS] >> 7) & 1;
 }
