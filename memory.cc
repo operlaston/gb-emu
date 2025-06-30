@@ -1,6 +1,5 @@
 #include "memory.hh"
 #include "constants.hh"
-#include "gpu.hh"
 #include "timer.hh"
 #include "joypad.hh"
 #include <cstdio>
