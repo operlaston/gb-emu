@@ -313,9 +313,14 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
   }
 
   else if(address == LCD_CONTROL) {
+    bool prev_lcd_enabled = is_lcd_enabled();
     mem[address] = data;
     if (is_lcd_enabled()) {
+      if (!prev_lcd_enabled) printf("lcd turned on\n");
       check_lyc_ly();
+    }
+    else if (prev_lcd_enabled){
+      printf("lcd turned off\n");
     }
   }
 
@@ -412,6 +417,7 @@ void Memory::check_lyc_ly() {
   if (is_lcd_enabled()) {
     if (mem[LY] == mem[LYC]) {
       mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
+      // printf("set ly==lyc to 1\n");
       // printf("LYC = LY\n");
       // printf("LCD_STATUS = %d\n", mem[LCD_STATUS]);
       if ((mem[LCD_STATUS] >> 6) & 0x1) {
@@ -419,7 +425,9 @@ void Memory::check_lyc_ly() {
         request_interrupt(STAT_INTER);
       }
     }
-    else mem[LCD_STATUS] = mem[LCD_STATUS] & ~(1 << 2);
+    else {
+      mem[LCD_STATUS] = mem[LCD_STATUS] & ~(1 << 2);
+    }
   }
 }
 
