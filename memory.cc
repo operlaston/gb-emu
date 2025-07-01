@@ -313,14 +313,10 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
   }
 
   else if(address == LCD_CONTROL) {
-    bool prev_lcd_enabled = is_lcd_enabled();
+    bool prev_enabled = is_lcd_enabled();
     mem[address] = data;
-    if (is_lcd_enabled()) {
-      if (!prev_lcd_enabled) printf("lcd turned on\n");
+    if (is_lcd_enabled() && !prev_enabled) {
       check_lyc_ly();
-    }
-    else if (prev_lcd_enabled){
-      printf("lcd turned off\n");
     }
   }
 
@@ -434,7 +430,8 @@ void Memory::check_lyc_ly() {
 void Memory::dma_transfer(uint8_t data) {
   uint16_t xfer_i = data << 8;
   for (int i = 0xFE00; i < 0xFEA0; i++) {
-    mem[i] = mem[xfer_i];
+    // mem[i] = mem[xfer_i];
+    mem[i] = read_byte(xfer_i);
     xfer_i++;
   }
 }

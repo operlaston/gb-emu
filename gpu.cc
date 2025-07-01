@@ -246,7 +246,7 @@ void Gpu::draw_line() {
 void Gpu::step(uint8_t cycles) {
   set_lcdc_status();
   if (!lcd_enable) {
-    // mode_clock = 0;
+    mode_clock = 0;
     set_mode(0);
     mmu.reset_scanline();
     return;
