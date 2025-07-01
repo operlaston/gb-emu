@@ -244,6 +244,10 @@ void Gpu::draw_line() {
 }
 
 void Gpu::step(uint8_t cycles) {
+  // set_lcdc_status();
+  // if (!lcd_enable) {
+  //   return;
+  // }
   mode_clock += cycles;
   switch (mode) {
     case 2:

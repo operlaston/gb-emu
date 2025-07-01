@@ -6,8 +6,6 @@
 #include <iostream>
 #include <istream>
 
-using namespace std;
-
 static unsigned char mem[0x10000];
 static unsigned char cart[0x200000];
 static unsigned char ram_banks[0x8000]; // a ram bank is 0x2000 in size and there are 4 max
@@ -16,7 +14,7 @@ Memory::Memory(char *rom_path){
 
   FILE *rom_fp = fopen(rom_path, "rb"); // open in read binary mode
   if (rom_fp == NULL) {
-    cout << "Failed to load rom with filepath " << rom_path << endl;
+    std::cout << "Failed to load rom with filepath " << rom_path << std::endl;
     exit(1);
   }
 
@@ -24,13 +22,13 @@ Memory::Memory(char *rom_path){
   unsigned long fsize = ftell(rom_fp); 
   rewind(rom_fp);
   if (fsize > sizeof(cart)) { 
-    cout << "rom is too large" << endl;
+    std::cout << "rom is too large" << std::endl;
     fclose(rom_fp);
     rom_fp = NULL;
     exit(1);
   }
   if (fread(cart, 1, fsize, rom_fp) != fsize) { 
-    cout << "failed to read rom contents" << endl;
+    std::cout << "failed to read rom contents" << std::endl;
     fclose(rom_fp);
     rom_fp = NULL;
     exit(1);
@@ -42,7 +40,6 @@ Memory::Memory(char *rom_path){
   switch(cart[0x147]) {
     case 0:
       banking_type = NONE;
-      printf("No memory banking\n");
       break;
     case 0x1:
       banking_type = MBC1;
@@ -50,12 +47,11 @@ Memory::Memory(char *rom_path){
       break;
     case 0x2:
       banking_type = MBC1_RAM;
+      printf("MBC1\n");
       break;
     case 0x3:
       banking_type = MBC1_RAM_BATTERY;
-      break;
-    case 0x5:
-      banking_type = MBC2;
+      printf("MBC1\n");
       break;
     case 0x11:
       banking_type = MBC3;
@@ -67,56 +63,63 @@ Memory::Memory(char *rom_path){
       banking_type = MBC3_RAM_BATTERY;
       break;
     default:
-      banking_type = NONE;
+      printf("This MBC type is not supported. Only MBC1 and MBC3 are currently supported\n");
+      exit(1);
+      break;
   }
 
   num_rom_banks = 2 << cart[0x148];
   if (cart[0x148] > 6) {
-    cout << "invalid byte at 0x148 for rom size" << endl;
+    std::cout << "invalid byte at 0x148 for rom size" << std::endl;
     exit(1);
   }
 
+  printf("Number of rom banks: %d\n", num_rom_banks);
+
   switch(cart[0x149]) {
     case 0x0:
-      ram_size = 0;
+      ram_size = NO_BANKS;
       break;
     case 0x1:
-      ram_size = 2048;
+      ram_size = NO_BANKS; // unused
       break;
     case 0x2:
-      ram_size = 8192;
+      ram_size = ONE_BANK;
       break;
     case 0x3:
-      ram_size = 32768;
+      ram_size = FOUR_BANKS;
       break;
     case 0x4:
-      ram_size = 131072;
+      ram_size = SIXTEEN_BANKS;
       break;
     case 0x5:
-      ram_size = 65536;
+      ram_size = EIGHT_BANKS;
       break;
     
   }
+
+  printf("RAM Size: %d\n", ram_size);
 
   uint8_t checksum = 0;
   for (uint16_t address = 0x0134; address <= 0x014C; address++) {
     checksum = checksum - cart[address] - 1;
   }
   if (checksum != cart[0x14D]) {
-    cout << "checksum did not pass. stopped during init" << endl;
+    std::cout << "checksum did not pass. stopped during init" << std::endl;
     exit(1);
   }
 
-  curr_rom_bank = 1; // rom bank at 0x4000-0x7fff (default is 1)
   memset(ram_banks, 0, sizeof(ram_banks));
+  curr_rom_bank = 1; // rom bank at 0x4000-0x7fff (default is 1)
   curr_ram_bank = 0;
 
   ram_enabled = false;
+  mode_flag = false;
 
   // copy rom into memory
-  for (unsigned long i = 0; i < 0x8000; i++) {
-    mem[i] = cart[i];
-  }
+  // for (unsigned long i = 0; i < 0x8000; i++) {
+  //   mem[i] = cart[i];
+  // }
 
   // reset joypad
   mem[0xFF00] = 0x0F;
@@ -167,18 +170,27 @@ void Memory::set_joypad(Joypad *j) {
 
 uint8_t Memory::mbc1_read(uint16_t address) const {
   if (address <= 0x3FFF) {
+    // TODO: banking for roms >= 1MB
+
     return cart[address];
   }
 
   // reading from ROM bank
   else if (address >= 0x4000 && address <= 0x7FFF) {
-    return cart[(address - 0x4000) + (curr_rom_bank * 0x4000)];
+    // printf("curr rom bank: %d\n", curr_rom_bank);
+    uint32_t offset = 0x4000 * curr_rom_bank;
+    return cart[(address - 0x4000) + offset];
   }
 
   // reading from RAM bank
   else if (address >= 0xA000 && address <= 0xBFFF) {
+    // printf("attempted ram read\n");
     if (ram_enabled) {
-      return ram_banks[(address - 0xA000) + (curr_ram_bank * 0x2000)]; 
+      if (mode_flag) {
+        uint32_t offset = 0x2000 * curr_ram_bank;
+        return ram_banks[(address - 0xA000) + offset]; 
+      }
+      return ram_banks[address - 0xA000];
     }
     else return 0xFF;
   }
@@ -187,63 +199,54 @@ uint8_t Memory::mbc1_read(uint16_t address) const {
   return 0;
 }
 
-void Memory::handle_banking(unsigned short address, unsigned char data) {
-  if (banking_type == MBC1 || banking_type == MBC1_RAM || 
-      banking_type == MBC1_RAM_BATTERY) {
-    if (address < 0x2000) {
-      unsigned char lower_bits = data & 0xF;
-      if ( lower_bits == 0xA ) {
-        ram_enabled = true; //enable ram bank writing
+void Memory::mbc1_write(unsigned short address, unsigned char data) {
+  if (address < 0x2000) {
+    ram_enabled = (data & 0xF) == 0xA;
+  } 
+  else if (address < 0x4000) {
+    // uint8_t n = data == 0 ? 1 : data;
+    // curr_rom_bank = (curr_rom_bank & 0b01100000) | (n & 0b00011111);
+    uint8_t mask = num_rom_banks >= 32 ? 31 : num_rom_banks - 1;
+    if ((data & 0b11111) == 0) curr_rom_bank = 1;
+    else curr_rom_bank = data & mask;
+  }
+  else if (address < 0x6000){
+    if (mode_flag) {
+      if (ram_size == FOUR_BANKS) {
+        curr_ram_bank = data & 0x3;
       }
-      else{
-        ram_enabled = false; //disable ram bank writing
+      if (num_rom_banks > 32) {
+        curr_rom_bank = (curr_rom_bank & 0b00011111) | ((data & 3) << 5);
+        if (num_rom_banks == 64) {
+          curr_rom_bank &= (1 << 6); // mask bit 6 off if not needed
+        }
+      } 
+    }
+    // curr_ram_bank = data & 0x3;
+    // if (mode_flag) {
+    //   curr_ram_bank = data & 0x3;
+    // }
+    // else {
+    //   curr_rom_bank = (curr_rom_bank & 0b00011111) | ((data & 3) << 5);
+    // }
+  }
+  else if (address < 0x8000) {
+    mode_flag = data & 1;
+  }
+  else {
+    // printf("attempted ram write\n");
+    if (ram_enabled) {
+      if (mode_flag) {
+        ram_banks[(address - 0xA000) + (0x2000 * curr_ram_bank)] = data;
       }
-    } 
-    else if (address < 0x4000) {
-      // TODO: rom bank change
-      uint8_t mask = num_rom_banks >= 32 ? 31 : num_rom_banks - 1;
-      if (data == 0) curr_rom_bank = 1;
-      else curr_rom_bank = data & mask;
-    }
-    else if (address < 0x6000){
-      // TODO: rom or ram bank change
-      curr_ram_bank = data & 0x3;
-    }
-    else if (address < 0x8000) {
-      mode_flag = data & 1;
-    }
-    else {
-      // TODO: do something else
-      if (ram_enabled) {
-        if(ram_size <= 8192) {
-          ram_banks[(address - 0xA000) % ram_size] = data;
-        }
-        else if (mode_flag) {
-          ram_banks[0x2000 * curr_ram_bank + (address - 0xA000)] = data;
-        }
-        else {
-          ram_banks[address - 0xA000] = data;
-        }
-      }
+      else ram_banks[address - 0xA000] = data;
     }
   }
-  else if (banking_type == MBC2) {
-    if ( address < 0x4000 ) {
-      unsigned char lower_bits = data & 0xF;
-    // The least significant bit of the upper address byte must be zero to enable/disable cart RAM
-      if ((address & 0x10) == 0) { // bit 8 is not set
-        if ( lower_bits == 0xA ) {
-          ram_enabled = true; //enable ram bank writing
-        }
-        else{
-          ram_enabled = false; //disable ram bank writing
-        }
-      }
-      else { // bit 8 is set
-        curr_rom_bank = data & 0xF;
-        curr_rom_bank = curr_rom_bank == 0 ? 1 : curr_rom_bank;
-      }
-    }
+}
+
+void Memory::handle_banking(unsigned short address, unsigned char data) {
+  if (banking_type == MBC1 || banking_type == MBC1_RAM || banking_type == MBC1_RAM_BATTERY) {
+    mbc1_write(address, data);
   }
 }
 
@@ -312,6 +315,11 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
     dma_transfer(data);
   }
 
+  else if (address == LCD_STATUS) {
+    printf("set LCD STATUS to %d\n", data);
+    mem[address] = data & 0b01111000;
+  }
+
   else {
     mem[address] = data;
   }
@@ -319,8 +327,18 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
 
 
 unsigned char Memory::read_byte(unsigned short address) const {
+  if (address < 0x4000) {
+    if (banking_type == MBC1 || banking_type == MBC1_RAM || banking_type == MBC1_RAM_BATTERY) {
+      return mbc1_read(address);
+    }
+    return cart[address];
+  }
+
   // reading from ROM bank
   if (address >= 0x4000 && address <= 0x7FFF) {
+    if (banking_type == MBC1 || banking_type == MBC1_RAM || banking_type == MBC1_RAM_BATTERY) {
+      return mbc1_read(address);
+    }
     return cart[(address - 0x4000) + (curr_rom_bank * 0x4000)];
   }
 
@@ -366,6 +384,7 @@ void Memory::request_interrupt(uint8_t bit) {
 
 void Memory::reset_scanline() {
   mem[LY] = 0;
+  check_lyc_ly();
 }
 
 void Memory::inc_scanline() {
@@ -376,7 +395,10 @@ void Memory::inc_scanline() {
 void Memory::check_lyc_ly() {
   if (mem[LY] == mem[LYC]) {
     mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
+    printf("LYC = LY\n");
+    // printf("LCD_STATUS = %d\n", mem[LCD_STATUS]);
     if ((mem[LCD_STATUS] >> 6) & 0x1) {
+      printf("LYC = LY interrupt requested\n");
       request_interrupt(STAT_INTER);
     }
   }
@@ -396,5 +418,5 @@ void Memory::reset_lcd_status() {
 }
 
 bool Memory::is_lcd_enabled() const {
-  return (mem[LCD_STATUS] >> 7) & 1;
+  return (mem[LCD_CONTROL] >> 7) & 1;
 }

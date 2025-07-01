@@ -189,45 +189,6 @@ bool Cpu::service_interrupt() {
   return true;
 }
 
-// void Cpu::update_timers(uint8_t cycles) {
-//   mmu.update_div(cycles);
-//   // while (div_cycles >= 0xFF) {
-//   //   mmu.inc_div(); // increments DIV register after every 256 t-cycles
-//   //   div_cycles -= 0xFF;
-//   // }
-//
-//   uint8_t tac = mmu.read_byte(TAC_REG);
-//   if (!(tac & 0x4)) { // clock is disabled
-//     return;
-//   }
-//   tac &= 0x3;
-//   uint8_t tima = mmu.read_byte(TIMA_REG);
-//   uint32_t max_tima_cycles = 1024; // tac == 0 (every 1024 t-cycles or 256 m-cycles)
-//   if (tac == 1) {
-//     // 262144 hz or increment every 16 t-cycles or 4 m-cycles
-//     max_tima_cycles = 16;
-//   }
-//   else if (tac == 2) {
-//     // 65536 hz or increment every 64 t-cycles or 16 m-cycles
-//     max_tima_cycles = 64;
-//   }
-//   else {
-//     // 16384 hz of increment every 256 t-cycles or 64 m-cycles
-//     max_tima_cycles = 256;
-//   }
-//   tima_cycles += cycles;
-//   while (tima_cycles >= max_tima_cycles) {
-//     tima_cycles -= max_tima_cycles;
-//     if (tima == 0xFF) {
-//       mmu.write_byte(TIMA_REG, mmu.read_byte(TMA_REG));
-//       mmu.request_interrupt(TIMER_INTER);
-//     }
-//     else {
-//       mmu.write_byte(TIMA_REG, tima + 1);
-//     }
-//   }
-// }
-
 uint8_t Cpu::fetch_and_execute() {
   instr_cycles = 0;
   unsigned char opcode = mmu.read_byte(pc);
@@ -259,26 +220,6 @@ uint8_t Cpu::fetch_and_execute() {
   }
   return (instr_cycles << 2); // convert to T-cycles
 }
-
-// void Cpu::update() {
-//   // max cycles per frame (60 frames per second)
-//   const int CYCLES_PER_FRAME = CYCLES_PER_SECOND / 60;
-//   int cycles_this_update = 0;
-//   while (cycles_this_update < CYCLES_PER_FRAME) {
-//     // perform a cycle
-//     uint8_t cycles = 0;
-//     if (state == RUNNING) cycles = fetch_and_execute();
-//     else if (state == HALTED) cycles = 1;
-//     cycles_this_update += cycles;
-//     // update timers
-//     update_timers(cycles);
-//     // update graphics
-//     // do interrupts
-//     service_interrupt();
-//   }
-//   // render the screen
-// }
-
 
 /*
  * load instructions

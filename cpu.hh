@@ -245,7 +245,6 @@ public:
   // use default destructor
   uint8_t fetch_and_execute();
   CPU_STATE state;
-  // void update_timers(uint8_t);
   // interrupt handling
   bool service_interrupt();
 };

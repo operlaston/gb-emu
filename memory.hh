@@ -7,11 +7,18 @@ enum banking_types {
   MBC1,
   MBC1_RAM,
   MBC1_RAM_BATTERY,
-  MBC2,
   MBC3,
   MBC3_RAM,
   MBC3_RAM_BATTERY,
   NONE
+};
+
+enum ram_sizes {
+  NO_BANKS = 0,
+  ONE_BANK = 8192,
+  FOUR_BANKS = 32768,
+  SIXTEEN_BANKS = 131072,
+  EIGHT_BANKS = 65536,
 };
 
 class Timer;
@@ -34,6 +41,8 @@ private:
   void dma_transfer(uint8_t);
   bool is_lcd_enabled() const;
 
+  uint8_t mbc1_read(uint16_t address) const;
+  void mbc1_write(uint16_t address, uint8_t data);
 public:
   Memory(char *rom_path);
   // use default destructor
@@ -46,7 +55,6 @@ public:
   void reset_lcd_status();
   void inc_scanline();
   void check_lyc_ly();
-  uint8_t mbc1_read(uint16_t address) const;
   void set_timer(Timer *t);
   void set_joypad(Joypad *j);
 };
