@@ -213,11 +213,11 @@ void Gpu::draw_line() {
   scx = mmu.read_byte(SCX);
   curr_line = mmu.read_byte(LY);
 
-  if (!lcd_enable) {
-    set_mode(0);
-    mmu.reset_lcd_status();
-    return;
-  }
+  // if (!lcd_enable) {
+  //   set_mode(0);
+  //   mmu.reset_lcd_status();
+  //   return;
+  // }
 
   if (bg_win_enable) {
     uint8_t palette = mmu.read_byte(0xFF47);
@@ -244,10 +244,13 @@ void Gpu::draw_line() {
 }
 
 void Gpu::step(uint8_t cycles) {
-  // set_lcdc_status();
-  // if (!lcd_enable) {
-  //   return;
-  // }
+  set_lcdc_status();
+  if (!lcd_enable) {
+    set_mode(0);
+    mmu.reset_scanline();
+    return;
+  }
+
   mode_clock += cycles;
   switch (mode) {
     case 2:

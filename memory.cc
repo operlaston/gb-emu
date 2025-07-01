@@ -260,14 +260,6 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
   //   data &= ~0x80;
   // }
   //
-  // if (address == 0xFFFF) {
-  //   printf("IE flag is: %d\n", mem[address]);
-  //   printf("Setting IE flag to: %d\n", data);
-  // }
-  // if (address == 0xFF0F) {
-  //   printf("IF flag is: %d\n", mem[address]);
-  //   printf("Setting IF flag to: %d\n", data);
-  // }
 
   // 0x0000-0x7FFF is read only
   if (address < 0x8000 || (address >= 0xA000 && address < 0xC000)) {
@@ -316,8 +308,15 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
   }
 
   else if (address == LCD_STATUS) {
-    printf("set LCD STATUS to %d\n", data);
-    mem[address] = data & 0b01111000;
+    // printf("set LCD STATUS to %d\n", data);
+    mem[address] = mem[address] | (data & 0b01111000);
+  }
+
+  else if(address == LCD_CONTROL) {
+    mem[address] = data;
+    if (is_lcd_enabled()) {
+      check_lyc_ly();
+    }
   }
 
   else {
@@ -360,10 +359,20 @@ unsigned char Memory::read_byte(unsigned short address) const {
     return joypad->get_joypad_state();
   }
 
-  else if (address == LCD_STATUS) {
-    // return 0;
-    return is_lcd_enabled() ? mem[LCD_STATUS] : 0;
+  else if (address == IF_REG) {
+    return mem[address] | 0xE0;
   }
+
+  if (address == LCD_STATUS) {
+    return mem[LCD_STATUS] | 0b10000000;
+    // printf("STAT: %d\n", mem[LCD_STATUS]);
+  }
+
+  // if (address == LCD_CONTROL) {
+  //   if (!lcd_on) {
+  //     printf("lcd isn't on. LCD: %d\n", mem[address]);
+  //   }
+  // }
 
   return mem[address];
 }
@@ -387,22 +396,31 @@ void Memory::reset_scanline() {
   check_lyc_ly();
 }
 
+// void Memory::set_scanline(uint8_t ly) {
+//   mem[LY] = ly;
+// }
+
 void Memory::inc_scanline() {
   mem[LY]++; 
   check_lyc_ly();
 }
 
 void Memory::check_lyc_ly() {
-  if (mem[LY] == mem[LYC]) {
-    mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
-    printf("LYC = LY\n");
-    // printf("LCD_STATUS = %d\n", mem[LCD_STATUS]);
-    if ((mem[LCD_STATUS] >> 6) & 0x1) {
-      printf("LYC = LY interrupt requested\n");
-      request_interrupt(STAT_INTER);
+  // if (!is_lcd_enabled()) {
+  //   printf("LY = %d\tLYC = %d\n", mem[LY], mem[LYC]);
+  // }
+  if (is_lcd_enabled()) {
+    if (mem[LY] == mem[LYC]) {
+      mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
+      // printf("LYC = LY\n");
+      // printf("LCD_STATUS = %d\n", mem[LCD_STATUS]);
+      if ((mem[LCD_STATUS] >> 6) & 0x1) {
+        // printf("LYC = LY interrupt requested\n");
+        request_interrupt(STAT_INTER);
+      }
     }
+    else mem[LCD_STATUS] = mem[LCD_STATUS] & ~(1 << 2);
   }
-  else mem[LCD_STATUS] = mem[LCD_STATUS] & ~(1 << 2);
 }
 
 void Memory::dma_transfer(uint8_t data) {
@@ -411,10 +429,6 @@ void Memory::dma_transfer(uint8_t data) {
     mem[i] = mem[xfer_i];
     xfer_i++;
   }
-}
-
-void Memory::reset_lcd_status() {
-  mem[LCD_STATUS] = 0;
 }
 
 bool Memory::is_lcd_enabled() const {

@@ -81,6 +81,7 @@ private:
   bool is_last_instr_ei;
   bool is_prefix; // set by prefix instruction opcode 0xCB
   uint8_t instr_cycles; // m-cycles of the last executed instruction
+  bool halt_bug;
   
   void init_opcode_table();
   void init_prefix_table();

@@ -53,10 +53,14 @@ public:
   void request_interrupt(uint8_t);
   void reset_scanline();
   void reset_lcd_status();
+  void set_scanline(uint8_t ly);
   void inc_scanline();
   void check_lyc_ly();
   void set_timer(Timer *t);
   void set_joypad(Joypad *j);
+
+  // remove later
+  bool lcd_on;
 };
 
 #endif

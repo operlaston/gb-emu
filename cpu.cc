@@ -21,6 +21,7 @@ Cpu::Cpu(Memory& mem) : mmu(mem) {
   ime = 0;
   set_ime = false;
   is_prefix = false;
+  halt_bug = false;
   instr_cycles = 0;
 
   // set screen
@@ -186,6 +187,7 @@ bool Cpu::service_interrupt() {
   pc = interrupt_address;
   uint8_t mask = 1 << interrupt_type;
   mmu.write_byte(IF_REG, if_reg & ~mask);
+  ime = 0;
   return true;
 }
 
@@ -194,6 +196,10 @@ uint8_t Cpu::fetch_and_execute() {
   unsigned char opcode = mmu.read_byte(pc);
   // print_registers();
   pc++;
+  if (halt_bug) {
+    pc--;
+    halt_bug = false;
+  }
   auto& opcode_function = opcode_table[opcode];
   // handle 0xCB (prefix instruction); execute prefixed instruction immediately
   if (opcode == 0xCB) {
@@ -1161,13 +1167,20 @@ void Cpu::ei() {
 }
 
 void Cpu::halt() {
-  bool interrupts_pending = mmu.read_byte(IE_REG) & mmu.read_byte(IF_REG);
+  bool interrupts_pending = mmu.read_byte(IE_REG) & mmu.read_byte(IF_REG) & 0x1F;
   if (ime) {
-    service_interrupt();
+    if (!interrupts_pending) {
+      state = HALTED;
+    }
+    else {
+      service_interrupt();
+      instr_cycles = 24;
+    }
   }
   else {
     if (interrupts_pending) {
-
+      // exit immediately
+      halt_bug = true;
     }
     else {
       state = HALTED;
