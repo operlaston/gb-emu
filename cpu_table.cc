@@ -1,4 +1,5 @@
 #include "cpu.hh"
+#include <cstring>
 
 void Cpu::init_opcode_table() {
   // ensure opcodes without an instruction are set to 0

@@ -51,10 +51,6 @@ void Gameboy::update() {
       interrupt_cycles = 0;
     }
   }
-
-  // render the screen
-  gpu.render();
-
   const uint64_t end_time = SDL_GetPerformanceCounter();
   const double time_spent = (double)((end_time - start_time) * 1000) / 
                               SDL_GetPerformanceFrequency(); // time spent in milliseconds
