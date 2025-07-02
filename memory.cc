@@ -10,11 +10,11 @@ static unsigned char mem[0x10000];
 static unsigned char cart[0x200000];
 static unsigned char ram_banks[0x8000]; // a ram bank is 0x2000 in size and there are 4 max
 
-Memory::Memory(char *rom_path){
+Memory::Memory(char *rom_file){
 
-  FILE *rom_fp = fopen(rom_path, "rb"); // open in read binary mode
+  FILE *rom_fp = fopen(rom_file, "rb"); // open in read binary mode
   if (rom_fp == NULL) {
-    std::cout << "Failed to load rom with filepath " << rom_path << std::endl;
+    std::cout << "Failed to load rom with filepath " << rom_file << std::endl;
     exit(1);
   }
 
@@ -123,11 +123,6 @@ Memory::Memory(char *rom_path){
   ram_enabled = false;
   mode_flag = false;
 
-  // copy rom into memory
-  // for (unsigned long i = 0; i < 0x8000; i++) {
-  //   mem[i] = cart[i];
-  // }
-
   // reset joypad
   mem[0xFF00] = 0x0F;
 
@@ -164,7 +159,6 @@ Memory::Memory(char *rom_path){
   mem[0xFF4B] = 0x00;
   mem[0xFFFF] = 0x00;
 
-  printf("initialized memory\n");
 }
 
 void Memory::set_timer(Timer *t) {
@@ -328,7 +322,12 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
   // 0x0000-0x7FFF is read only
   if (address < 0x8000 || (address >= 0xA000 && address < 0xC000)) {
     mbc_write(address, data);
-    return;
+  }
+
+  else if (address >= 0x8000 && address <= 0x9FFF) {
+    if (get_ppu_mode() != 3) {
+      mem[address] = data;
+    }
   }
 
   // writing to internal ram also writes to echo ram
@@ -341,6 +340,12 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
   else if (address >= 0xE000 && address <= 0xFDFF) {
     mem[address] = data;
     mem[address - 0x2000] = data;
+  }
+
+  else if (address >= 0xFE00 && address <= 0xFE9F) {
+    if (get_ppu_mode() < 2) {
+      mem[address] = data;
+    }
   }
   
   // this memory is not usable
@@ -399,11 +404,19 @@ unsigned char Memory::read_byte(unsigned short address) const {
   }
 
   // reading from ROM bank
-  if (address >= 0x4000 && address <= 0x7FFF) {
+  else if (address >= 0x4000 && address <= 0x7FFF) {
     if (banking_type != NO_BANKING) {
       return mbc_read(address);
     }
     return cart[(address - 0x4000) + (curr_rom_bank * 0x4000)];
+  }
+
+  // VRAM
+  else if (address >= 0x8000 && address <= 0x9FFF) {
+    if (get_ppu_mode() == 3) {
+      return 0xFF;
+    }
+    return mem[address];
   }
 
   // reading from RAM bank
@@ -412,6 +425,13 @@ unsigned char Memory::read_byte(unsigned short address) const {
       return mbc_read(address);
     }
     return ram_banks[(address - 0xA000) + (curr_ram_bank * 0x2000)];
+  }
+
+  else if (address >= 0xFE00 && address <= 0xFE9F) {
+    if (get_ppu_mode() >= 2) {
+      return 0xFF;
+    }
+    return mem[address];
   }
 
   else if (address >= DIV_REG && address <= TAC_REG) {
@@ -428,16 +448,10 @@ unsigned char Memory::read_byte(unsigned short address) const {
     return mem[address] | 0xE0;
   }
 
-  if (address == LCD_STATUS) {
+  else if (address == LCD_STATUS) {
     return mem[LCD_STATUS] | 0b10000000;
     // printf("STAT: %d\n", mem[LCD_STATUS]);
   }
-
-  // if (address == LCD_CONTROL) {
-  //   if (!lcd_on) {
-  //     printf("lcd isn't on. LCD: %d\n", mem[address]);
-  //   }
-  // }
 
   return mem[address];
 }
@@ -471,17 +485,11 @@ void Memory::inc_scanline() {
 }
 
 void Memory::check_lyc_ly() {
-  // if (!is_lcd_enabled()) {
-  //   printf("LY = %d\tLYC = %d\n", mem[LY], mem[LYC]);
-  // }
   if (is_lcd_enabled()) {
     if (mem[LY] == mem[LYC]) {
       mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
-      // printf("set ly==lyc to 1\n");
-      // printf("LYC = LY\n");
-      // printf("LCD_STATUS = %d\n", mem[LCD_STATUS]);
       if ((mem[LCD_STATUS] >> 6) & 0x1) {
-        // printf("LYC = LY interrupt requested\n");
+        // printf("LYC = LY interrupt requested at LY = %d\n", mem[LY]);
         request_interrupt(STAT_INTER);
       }
     }
@@ -502,4 +510,8 @@ void Memory::dma_transfer(uint8_t data) {
 
 bool Memory::is_lcd_enabled() const {
   return (mem[LCD_CONTROL] >> 7) & 1;
+}
+
+uint8_t Memory::get_ppu_mode() const {
+  return mem[LCD_STATUS] & 0x3;
 }

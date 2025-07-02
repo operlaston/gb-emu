@@ -31,7 +31,6 @@ Cpu::Cpu(Memory& mem) : mmu(mem) {
   init_prefix_table();
 
   //cout << "set up instruction tables and initialized memory" << endl;
-  cout << "initalized cpu" << endl;
 }
 
 unsigned char *Cpu::find_r8(REGISTER reg) {
@@ -1015,6 +1014,7 @@ void Cpu::reti() {
   ret();
   ime = 1;
   instr_cycles = 4;
+  // printf("reti\n");
 }
 
 void Cpu::rst_vec(uint8_t n) {
@@ -1158,12 +1158,14 @@ void Cpu::push_r16(REGISTER r16) {
 void Cpu::di() {
   ime = 0;
   instr_cycles = 1;
+  // printf("di\n");
 }
 
 void Cpu::ei() {
   set_ime = true;
   is_last_instr_ei = true;
   instr_cycles = 1;
+  // printf("ei\n");
 }
 
 void Cpu::halt() {

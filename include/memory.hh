@@ -48,8 +48,11 @@ private:
   uint8_t mbc3_read(uint16_t address) const;
   void mbc3_write(uint16_t address, uint8_t data);
 
+  uint8_t get_ppu_mode() const;
+  
+
 public:
-  Memory(char *rom_path);
+  Memory(char *rom_file);
   // use default destructor
   
   void write_byte(unsigned short address, unsigned char data);

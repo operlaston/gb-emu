@@ -5,3 +5,6 @@ log1.txt
 .DS_Store
 compile_commands.json
 .cache
+dmg_boot.bin
+*.o
+gameboy

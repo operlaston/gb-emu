@@ -53,7 +53,6 @@ Gpu::Gpu(Memory& mem) : mmu(mem) {
     exit(1);
   }
 
-  std::cout << "initialized gpu" << std::endl;
 }
 
 bool Gpu::get_lcdc_bit(LCD_CONTROL_BIT bit) {
@@ -244,17 +243,25 @@ void Gpu::draw_line() {
 }
 
 void Gpu::step(uint8_t cycles) {
+  bool prev_lcd_enable = lcd_enable;
   set_lcdc_status();
   if (!lcd_enable) {
-    mode_clock = 0;
-    set_mode(0);
-    mmu.reset_scanline();
+    if (prev_lcd_enable) {
+      mode_clock = 0;
+      set_mode(0);
+      mmu.reset_scanline();
+    }
     return;
+  }
+  else if (!prev_lcd_enable){
+    mode_clock = 0;
+    set_mode(2);
+    mmu.reset_scanline();
   }
 
   mode_clock += cycles;
   switch (mode) {
-    case 2:
+    case 2: // OAM
       if (mode_clock >= MODE_2_CYCLES) {
         if (mmu.read_byte(LY) == wy) {
           win_line_enable = true;
@@ -263,7 +270,7 @@ void Gpu::step(uint8_t cycles) {
         mode_clock -= MODE_2_CYCLES;
       }
       break;
-    case 3:
+    case 3: // DRAW
       if (mode_clock >= MODE_3_CYCLES) {
         set_mode(0);
         draw_line();
@@ -273,7 +280,7 @@ void Gpu::step(uint8_t cycles) {
         }
       }
       break;
-    case 0:
+    case 0: // HBLANK
       if (mode_clock >= MODE_0_CYCLES) {
         mmu.inc_scanline();
         if (mmu.read_byte(LY) == SCREEN_HEIGHT) {
@@ -293,7 +300,7 @@ void Gpu::step(uint8_t cycles) {
         mode_clock -= MODE_0_CYCLES;
       }
       break;
-    case 1:
+    case 1: // VBLANK
       if (mode_clock >= MODE_1_CYCLES) {
         mmu.inc_scanline();
         win_line++;

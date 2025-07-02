@@ -3,15 +3,14 @@
 #include "constants.hh"
 #include <SDL2/SDL_timer.h>
 
-Gameboy::Gameboy(char *rom_path)
-  : mmu(rom_path),
+Gameboy::Gameboy(char *rom_file)
+  : mmu(rom_file),
     cpu(mmu),
     gpu(mmu),
     timer(mmu),
     joypad(mmu){
   mmu.set_timer(&timer);
   mmu.set_joypad(&joypad);
-  printf("completed initalization\n");
 }
 
 void Gameboy::start() {
@@ -24,6 +23,9 @@ void Gameboy::start() {
 void Gameboy::update() {
   // max cycles per frame (59.7275 frames per second)
   const int CYCLES_PER_FRAME = CYCLES_PER_SECOND / 59.7275;
+  // const int CYCLES_PER_FRAME = CYCLES_PER_SECOND / 59.7;
+  // const int CYCLES_PER_FRAME = 70224;
+
   int cycles_this_update = 0;
   uint8_t interrupt_cycles = 0;
 

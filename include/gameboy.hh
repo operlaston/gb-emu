@@ -16,7 +16,7 @@ class Gameboy {
   Joypad joypad;
 
 public:
-  Gameboy(char *rom_path);
+  Gameboy(char *rom_file);
   // default destructor
   void start();
   void update();
