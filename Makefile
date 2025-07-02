@@ -1,5 +1,5 @@
 CC = g++
-CCFLAGS = -g -Wall -Wextra -std=c++17 -O2 -I/usr/local/include
+CCFLAGS = -g -Wall -Wextra -std=c++17 -O2 -I/usr/local/include -Iinclude
 LDFLAGS = -L/usr/local/lib -lSDL2
 OBJ = main.o gameboy.o cpu.o cpu_table.o memory.o gpu.o timer.o joypad.o
 TARGET = gameboy
