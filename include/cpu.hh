@@ -40,7 +40,7 @@ typedef enum {
 
 typedef enum {
   HALTED,
-  STOPPED,
+  BOOTING,
   RUNNING
 } CPU_STATE;
 

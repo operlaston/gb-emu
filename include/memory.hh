@@ -23,7 +23,7 @@ enum ram_sizes {
 
 class Timer;
 class Joypad;
-class Gpu;
+class Cpu;
 
 class Memory {
 private:
@@ -36,6 +36,7 @@ private:
   bool ram_enabled;
   Timer *timer;
   Joypad *joypad;
+  Cpu *cpu;
 
   uint8_t mbc_read(unsigned short address) const;
   void mbc_write(unsigned short address, unsigned char data);
@@ -66,6 +67,7 @@ public:
   void check_lyc_ly();
   void set_timer(Timer *t);
   void set_joypad(Joypad *j);
+  void set_cpu(Cpu *cpu);
 
   // remove later
   bool lcd_on;

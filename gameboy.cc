@@ -11,6 +11,7 @@ Gameboy::Gameboy(char *rom_file)
     joypad(mmu){
   mmu.set_timer(&timer);
   mmu.set_joypad(&joypad);
+  mmu.set_cpu(&cpu);
 }
 
 void Gameboy::start() {
@@ -35,7 +36,7 @@ void Gameboy::update() {
     // perform a cycle
     // uint8_t cycles = interrupt_cycles;
     uint8_t cycles = interrupt_cycles;
-    if (cpu.state == RUNNING) cycles = cpu.fetch_and_execute();
+    if (cpu.state == RUNNING || cpu.state == BOOTING) cycles = cpu.fetch_and_execute();
     else if (cpu.state == HALTED) cycles = 4; // 1 m-cycle
     cycles_this_update += cycles;
     for (int i = 0; i < cycles; i++) {

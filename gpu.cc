@@ -52,7 +52,6 @@ Gpu::Gpu(Memory& mem) : mmu(mem) {
     SDL_Log("Could not create SDL renderer: %s\n", SDL_GetError());
     exit(1);
   }
-
 }
 
 bool Gpu::get_lcdc_bit(LCD_CONTROL_BIT bit) {

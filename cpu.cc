@@ -9,10 +9,11 @@ using namespace std;
 
 Cpu::Cpu(Memory& mem) : mmu(mem) {
   // initialize program state (put in higher level class later)
-  state = RUNNING;
+  state = BOOTING;
 
   // initialize program counter, stack pointer, registers
-  pc = 0x100;
+  // pc = 0x100 // skip boot
+  pc = 0x0;
   sp = 0xFFFE;
   AF.reg = 0x01B0;
   BC.reg = 0x0013;
@@ -192,6 +193,7 @@ bool Cpu::service_interrupt() {
 
 uint8_t Cpu::fetch_and_execute() {
   instr_cycles = 0;
+  if (state == BOOTING && pc == 0x100) state = RUNNING;
   unsigned char opcode = mmu.read_byte(pc);
   // print_registers();
   pc++;
