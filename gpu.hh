@@ -44,7 +44,7 @@ typedef struct {
 #define TILE_MAP_LENGTH (0x400)
 #define SCREEN_WIDTH (160)
 #define SCREEN_HEIGHT (144)
-#define SCALE_FACTOR (3)
+#define SCALE_FACTOR (5)
 
 class Gpu {
 

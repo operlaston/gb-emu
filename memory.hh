@@ -10,7 +10,7 @@ enum banking_types {
   MBC3,
   MBC3_RAM,
   MBC3_RAM_BATTERY,
-  NONE
+  NO_BANKING
 };
 
 enum ram_sizes {
@@ -37,12 +37,17 @@ private:
   Timer *timer;
   Joypad *joypad;
 
-  void handle_banking(unsigned short address, unsigned char data);
+  uint8_t mbc_read(unsigned short address) const;
+  void mbc_write(unsigned short address, unsigned char data);
   void dma_transfer(uint8_t);
   bool is_lcd_enabled() const;
 
   uint8_t mbc1_read(uint16_t address) const;
   void mbc1_write(uint16_t address, uint8_t data);
+
+  uint8_t mbc3_read(uint16_t address) const;
+  void mbc3_write(uint16_t address, uint8_t data);
+
 public:
   Memory(char *rom_path);
   // use default destructor
