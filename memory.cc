@@ -335,6 +335,7 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
     mbc_write(address, data);
   }
 
+  // VRAM
   else if (address >= 0x8000 && address <= 0x9FFF) {
     if (get_ppu_mode() != 3) {
       mem[address] = data;
@@ -353,6 +354,7 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
     mem[address - 0x2000] = data;
   }
 
+  // OAM
   else if (address >= 0xFE00 && address <= 0xFE9F) {
     if (get_ppu_mode() < 2) {
       mem[address] = data;
@@ -445,7 +447,8 @@ unsigned char Memory::read_byte(unsigned short address) const {
     }
     return ram_banks[(address - 0xA000) + (curr_ram_bank * 0x2000)];
   }
-
+  
+  // OAM
   else if (address >= 0xFE00 && address <= 0xFE9F) {
     if (get_ppu_mode() >= 2) {
       return 0xFF;
