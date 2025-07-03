@@ -363,8 +363,12 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
     bool prev_enabled = is_lcd_enabled();
     mem[address] = data;
     if (is_lcd_enabled() && !prev_enabled) {
+      // if (cpu->state != BOOTING) printf("lcd enabled\n");
       check_lyc_ly();
     }
+    // else if (!is_lcd_enabled() && prev_enabled) {
+    //   if (cpu-> state != BOOTING) printf("lcd disabled\n");
+    // }
   }
 
   else {
@@ -449,7 +453,10 @@ unsigned short Memory::read_word(unsigned short address) const {
 void Memory::request_interrupt(uint8_t bit) {
   // IE (interrupt enable): 0xFFFF
   // IF (interrupt flag/requested): 0xFF0F
-  // printf("requested %d\n", bit);
+
+  if (!cpu->ime && bit == STAT_INTER) {
+    return;
+  }
   write_byte(IF_REG, read_byte(IF_REG) | (1 << bit));
 }
 
@@ -470,9 +477,11 @@ void Memory::inc_scanline() {
 void Memory::check_lyc_ly() {
   if (is_lcd_enabled()) {
     if (mem[LY] == mem[LYC]) {
+      if (((mem[LCD_STATUS] >> 2) & 1) == 1) {
+        return;
+      }
       mem[LCD_STATUS] = mem[LCD_STATUS] | (1 << 2);
       if ((mem[LCD_STATUS] >> 6) & 0x1) {
-        // printf("LYC = LY interrupt requested at LY = %d\n", mem[LY]);
         request_interrupt(STAT_INTER);
       }
     }
@@ -483,6 +492,7 @@ void Memory::check_lyc_ly() {
 }
 
 void Memory::dma_transfer(uint8_t data) {
+  // printf("dma transfer %02X %d %d\n", data, mem[LY], mem[LCD_STATUS] & 0x3);
   uint16_t xfer_i = data << 8;
   for (int i = 0xFE00; i < 0xFEA0; i++) {
     // mem[i] = mem[xfer_i];

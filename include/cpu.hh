@@ -76,7 +76,7 @@ private:
   unsigned short pc;
 
   //unsigned char screen[160][144][3]; // r/g/b for color
-  bool ime; // ime (interrupt) flag
+  // bool ime; // ime (interrupt) flag
   bool set_ime; // set by the EI instruction
   bool is_last_instr_ei;
   bool is_prefix; // set by prefix instruction opcode 0xCB
@@ -246,6 +246,7 @@ public:
   // use default destructor
   uint8_t fetch_and_execute();
   CPU_STATE state;
+  bool ime; // ime (interrupt) flag
   // interrupt handling
   bool service_interrupt();
 };

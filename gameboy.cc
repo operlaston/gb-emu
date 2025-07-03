@@ -61,4 +61,5 @@ void Gameboy::update() {
   if (delay > 1.0) {
     SDL_Delay((Uint32) delay);
   }
+  // SDL_Delay(100);
 }

@@ -256,9 +256,7 @@ void Gpu::step(uint8_t cycles) {
     return;
   }
   else if (!prev_lcd_enable){
-    mode_clock = 0;
-    mmu.set_ppu_mode(2);
-    mmu.reset_scanline();
+    mmu.check_lyc_ly();
   }
 
   mode_clock += cycles;
