@@ -49,7 +49,6 @@ private:
   uint8_t mbc3_read(uint16_t address) const;
   void mbc3_write(uint16_t address, uint8_t data);
 
-  uint8_t get_ppu_mode() const;
   
 
 public:
@@ -69,8 +68,8 @@ public:
   void set_joypad(Joypad *j);
   void set_cpu(Cpu *cpu);
 
-  // remove later
-  bool lcd_on;
+  uint8_t get_ppu_mode() const;
+  void set_ppu_mode(uint8_t mode);
 };
 
 #endif

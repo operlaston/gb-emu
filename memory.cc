@@ -356,7 +356,7 @@ void Memory::write_byte(unsigned short address, unsigned char data) {
 
   else if (address == LCD_STATUS) {
     // printf("set LCD STATUS to %d\n", data);
-    mem[address] = mem[address] | (data & 0b01111000);
+    mem[address] = (mem[address] & 0b10000111) | (data & 0b01111000);
   }
 
   else if(address == LCD_CONTROL) {
@@ -438,6 +438,7 @@ unsigned char Memory::read_byte(unsigned short address) const {
   return mem[address];
 }
 
+
 // gameboy is little endian
 unsigned short Memory::read_word(unsigned short address) const {
   unsigned char lower_byte = read_byte(address);
@@ -496,4 +497,8 @@ bool Memory::is_lcd_enabled() const {
 
 uint8_t Memory::get_ppu_mode() const {
   return mem[LCD_STATUS] & 0x3;
+}
+
+void Memory::set_ppu_mode(uint8_t mode) {
+  mem[LCD_STATUS] = (mem[LCD_STATUS] & 0b11111100) | (mode & 0b00000011);
 }

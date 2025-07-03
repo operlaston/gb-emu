@@ -54,7 +54,6 @@ class Gpu {
   bool sprite_enable;
   bool lcd_enable;
   bool bg_win_enable;
-  uint8_t mode;
   uint16_t win_tile_map_base;
   uint16_t bg_tile_map_base;
   uint16_t tile_data_base;

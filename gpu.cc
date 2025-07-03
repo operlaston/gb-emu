@@ -18,7 +18,7 @@ uint8_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
 Gpu::Gpu(Memory& mem) : mmu(mem) {
   mode_clock = 0;
   memset(screen, 0, sizeof(screen));
-  set_mode(2);
+  // mmu.set_ppu_mode(2);
   win_enable = 0;
   sprite_enable = 0;
   lcd_enable = 0;
@@ -75,10 +75,10 @@ void Gpu::set_lcdc_status() {
   bg_win_enable = get_lcdc_bit(BG_WIN_ENABLE) ? 1 : 0;
 }
 
-void Gpu::set_mode(uint8_t mode) {
-  this->mode = mode;
-  mmu.write_byte(LCD_STATUS, mmu.read_byte(LCD_STATUS) | mode);
-}
+// void Gpu::mmu.set_ppu_mode(uint8_t mode) {
+//   this->mode = mode;
+//   mmu.write_byte(LCD_STATUS, mmu.read_byte(LCD_STATUS) | mode);
+// }
 
 void Gpu::draw_bg_pixel(uint8_t palette) {
   uint16_t tile_map_base = bg_tile_map_base;
@@ -212,14 +212,17 @@ void Gpu::draw_line() {
   curr_line = mmu.read_byte(LY);
 
   // if (!lcd_enable) {
-  //   set_mode(0);
+  //   mmu.set_ppu_mode(0);
   //   mmu.reset_scanline();
   //   return;
   // }
 
+  // printf("draw line: %d\n", curr_line);
+
   if (bg_win_enable) {
     uint8_t palette = mmu.read_byte(0xFF47);
 
+    // printf("drawing bg\n");
     // draw bg
     x_pos = 0;
     while (x_pos < 160) { 
@@ -247,31 +250,32 @@ void Gpu::step(uint8_t cycles) {
   if (!lcd_enable) {
     if (prev_lcd_enable) {
       mode_clock = 0;
-      set_mode(0);
+      mmu.set_ppu_mode(0);
       mmu.reset_scanline();
     }
     return;
   }
   else if (!prev_lcd_enable){
     mode_clock = 0;
-    set_mode(2);
+    mmu.set_ppu_mode(2);
     mmu.reset_scanline();
   }
 
   mode_clock += cycles;
-  switch (mode) {
+  // printf("step. ppu mode: %d\n", mmu.get_ppu_mode());
+  switch (mmu.get_ppu_mode()) {
     case 2: // OAM
       if (mode_clock >= MODE_2_CYCLES) {
         if (mmu.read_byte(LY) == wy) {
           win_line_enable = true;
         }
-        set_mode(3);
+        mmu.set_ppu_mode(3);
         mode_clock -= MODE_2_CYCLES;
       }
       break;
     case 3: // DRAW
       if (mode_clock >= MODE_3_CYCLES) {
-        set_mode(0);
+        mmu.set_ppu_mode(0);
         draw_line();
         mode_clock -= MODE_3_CYCLES;
         if (get_stat_bit(MODE_0)) {
@@ -285,13 +289,13 @@ void Gpu::step(uint8_t cycles) {
         if (mmu.read_byte(LY) == SCREEN_HEIGHT) {
           render();
           mmu.request_interrupt(VBLANK_INTER);
-          set_mode(1); 
+          mmu.set_ppu_mode(1); 
           if (get_stat_bit(MODE_1)) {
             mmu.request_interrupt(STAT_INTER);
           }
         }
         else {
-          set_mode(2);
+          mmu.set_ppu_mode(2);
           if (get_stat_bit(MODE_2)) {
             mmu.request_interrupt(STAT_INTER);
           }
@@ -307,7 +311,7 @@ void Gpu::step(uint8_t cycles) {
           mmu.reset_scanline();
           win_line = 0;
           win_line_enable = false;
-          set_mode(2);
+          mmu.set_ppu_mode(2);
         }
         mode_clock -= MODE_1_CYCLES;
       }
