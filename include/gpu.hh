@@ -87,6 +87,7 @@ class Gpu {
   void set_lcdc_status();
   void draw_line();
   void set_mode(uint8_t);
+  // void render_sprite_tile_debug(uint8_t);
 
   // SDL
   SDL_Window *window;

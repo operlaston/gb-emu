@@ -198,7 +198,16 @@ void Gpu::draw_sprites() {
   stable_sort(begin(sprites), begin(sprites) + num_sprites, [](const sprite_t& a, const sprite_t& b) {
     return a.x < b.x;
   });
+  // if (curr_line >= 102) {
+  //   printf("Line %d: ", curr_line);
+  // }
   for (int i = num_sprites - 1; i >= 0; i--) {
+    // if (curr_line >= 94 && sprites[i].tile_index == 98) {
+    //   printf("Line: %d x: %d y: %d tile: %d flags: %d\n", curr_line, sprites[i].x, sprites[i].y, sprites[i].tile_index, sprites[i].flags);
+    // }
+    // if (curr_line >= 102 && curr_line <= 113) {
+    //   printf("x: %d y: %d tile: %d flags: %d\n", sprites[i].x, sprites[i].y, sprites[i].tile_index, sprites[i].flags);
+    // }
     draw_sprite(sprites[i]);
   }
 }
@@ -252,11 +261,20 @@ void Gpu::step(uint8_t cycles) {
       mode_clock = 0;
       mmu.set_ppu_mode(0);
       mmu.reset_scanline();
+      win_line = 0;
+      curr_line = 0;
+      for (int i = 0; i < SCREEN_HEIGHT; i++) {
+        for (int j = 0; j < SCREEN_WIDTH; j++) {
+          screen[i][j] = 0;
+        }
+      }
+      render();
     }
     return;
   }
   else if (!prev_lcd_enable){
     mmu.check_lyc_ly();
+    mmu.set_ppu_mode(2);
   }
 
   mode_clock += cycles;
@@ -350,3 +368,63 @@ void Gpu::render() {
   SDL_RenderPresent(renderer);
 }
 
+// void Gpu::render_sprite_tile_debug(uint8_t tile) {
+  // for (int i = 0; i < SCREEN_WIDTH; i++) {
+  //   for (int j = 0; j < SCREEN_HEIGHT; j++) {
+  //     SDL_Rect pixel = {
+  //       (j + 8) * SCALE_FACTOR,
+  //       i * SCALE_FACTOR,
+  //       SCALE_FACTOR,
+  //       SCALE_FACTOR
+  //     };
+  //     set_draw_color(0);
+  //     SDL_RenderFillRect(renderer, &pixel); 
+  //   }
+  // }
+  // uint8_t obp0 = mmu.read_byte(0xFF48);
+  // uint8_t obp1 = mmu.read_byte(0xFF49);
+  // uint16_t tile_addr = 0x8000 + (16 * tile);
+  // for (int i = 0; i < 8; i++) {
+  //   uint8_t byte1 = mmu.read_byte(tile_addr + (2 * i));
+  //   uint8_t byte2 = mmu.read_byte(tile_addr + (2 * i) + 1);
+  //   printf("byte1: %d\n", byte1);
+  //   printf("byte2: %d\n", byte2);
+  //   for (int j = 0; j < 8; j++) {
+  //     uint8_t bit = 7 - j;
+  //     uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
+  //     if (color_id == 0) {
+  //       return;
+  //     }
+  //     uint8_t color = (obp0 >> (color_id << 1)) & 0x3; // extract the color from the palette
+  //     SDL_Rect pixel = {
+  //       j * SCALE_FACTOR,
+  //       i * SCALE_FACTOR,
+  //       SCALE_FACTOR,
+  //       SCALE_FACTOR
+  //     };
+  //     set_draw_color(color);
+  //     SDL_RenderFillRect(renderer, &pixel); 
+  //   }
+  // }
+  // for (int i = 0; i < 8; i++) {
+  //   uint8_t byte1 = mmu.read_byte(tile_addr + (2 * i));
+  //   uint8_t byte2 = mmu.read_byte(tile_addr + (2 * i) + 1);
+  //   for (int j = 0; j < 8; j++) {
+  //     uint8_t bit = 7 - j;
+  //     uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
+  //     if (color_id == 0) {
+  //       return;
+  //     }
+  //     uint8_t color = (obp1 >> (color_id << 1)) & 0x3; // extract the color from the palette
+  //     SDL_Rect pixel = {
+  //       (j + 8) * SCALE_FACTOR,
+  //       i * SCALE_FACTOR,
+  //       SCALE_FACTOR,
+  //       SCALE_FACTOR
+  //     };
+  //     set_draw_color(color);
+  //     SDL_RenderFillRect(renderer, &pixel); 
+  //   }
+  // }
+  // SDL_RenderPresent(renderer);
+// }
