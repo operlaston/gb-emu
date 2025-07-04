@@ -44,7 +44,7 @@ typedef struct {
 #define TILE_MAP_LENGTH (0x400)
 #define SCREEN_WIDTH (160)
 #define SCREEN_HEIGHT (144)
-#define SCALE_FACTOR (5)
+#define SCALE_FACTOR (3)
 
 class Gpu {
 
@@ -83,7 +83,7 @@ class Gpu {
   void draw_sprite_pixel(uint8_t palette, uint8_t sprite_x, uint8_t sprite_y, 
                           uint8_t pos_x, uint8_t pos_y, uint16_t tile_addr);
   void draw_sprite_tile_line(int16_t, int16_t, int16_t, uint8_t, uint8_t);
-  void set_draw_color(uint8_t);
+  // void set_draw_color(uint8_t);
   void set_lcdc_status();
   void draw_line();
   void set_mode(uint8_t);
@@ -92,6 +92,7 @@ class Gpu {
   // SDL
   SDL_Window *window;
   SDL_Renderer *renderer;
+  SDL_Texture *texture;
 
 public:
   Gpu(Memory& mem);

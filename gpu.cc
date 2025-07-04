@@ -1,4 +1,9 @@
 #include "gpu.hh"
+#include "SDL2/SDL_error.h"
+#include "SDL2/SDL_log.h"
+#include "SDL2/SDL_pixels.h"
+#include "SDL2/SDL_render.h"
+#include "SDL2/SDL_video.h"
 #include "constants.hh"
 #include <algorithm>
 #include <cstdlib>
@@ -13,11 +18,17 @@ typedef struct {
   int16_t sprite_x;
 } sprite_prio_t;
 
-uint8_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
+uint32_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
+uint32_t colors[4] = {
+  0xFFFFFFFF, // white
+  0xAAAAAAFF, // light gray
+  0x555555FF, // dark gray
+  0x000000FF, // black
+};
 
 Gpu::Gpu(Memory& mem) : mmu(mem) {
   mode_clock = 0;
-  memset(screen, 0, sizeof(screen));
+  memset(screen, colors[0], sizeof(screen));
   // mmu.set_ppu_mode(2);
   win_enable = 0;
   sprite_enable = 0;
@@ -39,17 +50,31 @@ Gpu::Gpu(Memory& mem) : mmu(mem) {
     exit(1);
   }
 
-  window = SDL_CreateWindow("Operlaston's Gameboy Emulator", 0, 0,
+  window = SDL_CreateWindow("Operlaston's Gameboy Emulator", 
+                            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                             SCREEN_WIDTH * SCALE_FACTOR,
-                            SCREEN_HEIGHT * SCALE_FACTOR, 0);
+                            SCREEN_HEIGHT * SCALE_FACTOR, 
+                            SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
   if (window == NULL) {
     SDL_Log("Could not create SDL window: %s\n", SDL_GetError());
     exit(1);
   }
 
-  renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+  renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (renderer == NULL) {
     SDL_Log("Could not create SDL renderer: %s\n", SDL_GetError());
+    exit(1);
+  }
+  SDL_RenderSetLogicalSize(renderer, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+  texture = SDL_CreateTexture(
+    renderer,
+    SDL_PIXELFORMAT_RGBA8888,
+    SDL_TEXTUREACCESS_STREAMING,
+    SCREEN_WIDTH, SCREEN_HEIGHT
+  );
+  if (texture == NULL) {
+    SDL_Log("Could not create SDL texture: %s\n", SDL_GetError());
     exit(1);
   }
 }
@@ -124,7 +149,7 @@ void Gpu::draw_pixel(uint8_t palette, uint8_t x, uint8_t y,
   uint8_t bit = 7 - (x & 0x7);
   uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
   uint8_t color = (palette >> (color_id << 1)) & 0x3; // extract the color from the palette
-  screen[curr_line][x_pos++] = color; 
+  screen[curr_line][x_pos++] = colors[color]; 
 }
 
 // sprite_x is the pixel to draw's x position relative to the tile (affected by x flip)
@@ -140,7 +165,7 @@ void Gpu::draw_sprite_pixel(uint8_t palette, uint8_t draw_x, uint8_t draw_y,
     return;
   }
   uint8_t color = (palette >> (color_id << 1)) & 0x3; // extract the color from the palette
-  screen[pos_y][pos_x] = color;   
+  screen[pos_y][pos_x] = colors[color];
 }
 
 void Gpu::draw_sprite(sprite_t sprite) {
@@ -171,7 +196,7 @@ void Gpu::draw_sprite(sprite_t sprite) {
     if (sprite.x + i < 0) continue;
     uint8_t draw_x = i;
     if (x_flip) draw_x = 7 - draw_x;
-    if (screen[curr_line][sprite.x + i] == 0 || bg_priority == 0) {
+    if (screen[curr_line][sprite.x + i] == colors[0] || bg_priority == 0) {
       draw_sprite_pixel(palette, draw_x, draw_y, sprite.x + i, curr_line, tile_addr);
     }
   }
@@ -265,7 +290,7 @@ void Gpu::step(uint8_t cycles) {
       curr_line = 0;
       for (int i = 0; i < SCREEN_HEIGHT; i++) {
         for (int j = 0; j < SCREEN_WIDTH; j++) {
-          screen[i][j] = 0;
+          screen[i][j] = colors[0];
         }
       }
       render();
@@ -335,96 +360,39 @@ void Gpu::step(uint8_t cycles) {
   }
 }
 
-void Gpu::set_draw_color(uint8_t color) {
-  switch(color) {
-    case 0:
-      SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-     break;
-    case 1:
-      SDL_SetRenderDrawColor(renderer, 170, 170, 170, 255);
-     break;
-    case 2:
-      SDL_SetRenderDrawColor(renderer, 85, 85, 85, 255);
-      break;
-    case 3:
-      SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-      break;
-  }
-}
+// void Gpu::set_draw_color(uint8_t color) {
+//   switch(color) {
+//     case 0:
+//       SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+//      break;
+//     case 1:
+//       SDL_SetRenderDrawColor(renderer, 170, 170, 170, 255);
+//      break;
+//     case 2:
+//       SDL_SetRenderDrawColor(renderer, 85, 85, 85, 255);
+//       break;
+//     case 3:
+//       SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+//       break;
+//   }
+// }
 
 void Gpu::render() {
-  for (int y = 0; y < SCREEN_HEIGHT; y++) {
-    for (int x = 0; x < SCREEN_WIDTH; x++) {
-      SDL_Rect pixel = {
-        x * SCALE_FACTOR,
-        y * SCALE_FACTOR,
-        SCALE_FACTOR,
-        SCALE_FACTOR
-      };
-      set_draw_color(screen[y][x]);
-      SDL_RenderFillRect(renderer, &pixel);
-    }
-  }
+  // for (int y = 0; y < SCREEN_HEIGHT; y++) {
+  //   for (int x = 0; x < SCREEN_WIDTH; x++) {
+  //     SDL_Rect pixel = {
+  //       x * SCALE_FACTOR,
+  //       y * SCALE_FACTOR,
+  //       SCALE_FACTOR,
+  //       SCALE_FACTOR
+  //     };
+  //     set_draw_color(screen[y][x]);
+  //     SDL_RenderFillRect(renderer, &pixel);
+  //   }
+  // }
+  SDL_UpdateTexture(texture, NULL, screen, SCREEN_WIDTH * sizeof(uint32_t));
+  SDL_RenderClear(renderer);
+  SDL_RenderCopy(renderer, texture, NULL, NULL);
   SDL_RenderPresent(renderer);
 }
 
-// void Gpu::render_sprite_tile_debug(uint8_t tile) {
-  // for (int i = 0; i < SCREEN_WIDTH; i++) {
-  //   for (int j = 0; j < SCREEN_HEIGHT; j++) {
-  //     SDL_Rect pixel = {
-  //       (j + 8) * SCALE_FACTOR,
-  //       i * SCALE_FACTOR,
-  //       SCALE_FACTOR,
-  //       SCALE_FACTOR
-  //     };
-  //     set_draw_color(0);
-  //     SDL_RenderFillRect(renderer, &pixel); 
-  //   }
-  // }
-  // uint8_t obp0 = mmu.read_byte(0xFF48);
-  // uint8_t obp1 = mmu.read_byte(0xFF49);
-  // uint16_t tile_addr = 0x8000 + (16 * tile);
-  // for (int i = 0; i < 8; i++) {
-  //   uint8_t byte1 = mmu.read_byte(tile_addr + (2 * i));
-  //   uint8_t byte2 = mmu.read_byte(tile_addr + (2 * i) + 1);
-  //   printf("byte1: %d\n", byte1);
-  //   printf("byte2: %d\n", byte2);
-  //   for (int j = 0; j < 8; j++) {
-  //     uint8_t bit = 7 - j;
-  //     uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
-  //     if (color_id == 0) {
-  //       return;
-  //     }
-  //     uint8_t color = (obp0 >> (color_id << 1)) & 0x3; // extract the color from the palette
-  //     SDL_Rect pixel = {
-  //       j * SCALE_FACTOR,
-  //       i * SCALE_FACTOR,
-  //       SCALE_FACTOR,
-  //       SCALE_FACTOR
-  //     };
-  //     set_draw_color(color);
-  //     SDL_RenderFillRect(renderer, &pixel); 
-  //   }
-  // }
-  // for (int i = 0; i < 8; i++) {
-  //   uint8_t byte1 = mmu.read_byte(tile_addr + (2 * i));
-  //   uint8_t byte2 = mmu.read_byte(tile_addr + (2 * i) + 1);
-  //   for (int j = 0; j < 8; j++) {
-  //     uint8_t bit = 7 - j;
-  //     uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
-  //     if (color_id == 0) {
-  //       return;
-  //     }
-  //     uint8_t color = (obp1 >> (color_id << 1)) & 0x3; // extract the color from the palette
-  //     SDL_Rect pixel = {
-  //       (j + 8) * SCALE_FACTOR,
-  //       i * SCALE_FACTOR,
-  //       SCALE_FACTOR,
-  //       SCALE_FACTOR
-  //     };
-  //     set_draw_color(color);
-  //     SDL_RenderFillRect(renderer, &pixel); 
-  //   }
-  // }
-  // SDL_RenderPresent(renderer);
-// }
