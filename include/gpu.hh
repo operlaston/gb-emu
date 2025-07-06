@@ -2,12 +2,10 @@
 #define GPU_H
 
 #include "memory.hh"
-#include <cstdint>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_video.h>
-#include <SDL2/SDL_audio.h>
-#include <SDL2/SDL_error.h>
+#include <cstdint>
 
 // bits for the LCD control register
 typedef enum {
@@ -48,7 +46,7 @@ typedef struct {
 
 class Gpu {
 
-  Memory& mmu;
+  Memory &mmu;
   uint16_t mode_clock;
   bool win_enable;
   bool sprite_enable;
@@ -80,8 +78,8 @@ class Gpu {
   uint16_t get_tile_addr(uint8_t x, uint8_t y, uint16_t tile_map_base);
   void draw_sprites();
   void draw_sprite(sprite_t sprite);
-  void draw_sprite_pixel(uint8_t palette, uint8_t sprite_x, uint8_t sprite_y, 
-                          uint8_t pos_x, uint8_t pos_y, uint16_t tile_addr);
+  void draw_sprite_pixel(uint8_t palette, uint8_t sprite_x, uint8_t sprite_y,
+                         uint8_t pos_x, uint8_t pos_y, uint16_t tile_addr);
   void draw_sprite_tile_line(int16_t, int16_t, int16_t, uint8_t, uint8_t);
   // void set_draw_color(uint8_t);
   void set_lcdc_status();
@@ -90,16 +88,17 @@ class Gpu {
   // void render_sprite_tile_debug(uint8_t);
 
   // SDL
-  SDL_Window *window;
+  // SDL_Window *window;
   SDL_Renderer *renderer;
   SDL_Texture *texture;
 
 public:
-  Gpu(Memory& mem);
+  Gpu(Memory &mem);
   // use default destructor
   void step(uint8_t);
   void render();
   bool is_lcd_enabled();
+  void init_sdl(SDL_Renderer *, SDL_Texture *);
 };
 
 #endif

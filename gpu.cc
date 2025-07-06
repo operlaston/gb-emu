@@ -1,9 +1,4 @@
 #include "gpu.hh"
-#include "SDL2/SDL_error.h"
-#include "SDL2/SDL_log.h"
-#include "SDL2/SDL_pixels.h"
-#include "SDL2/SDL_render.h"
-#include "SDL2/SDL_video.h"
 #include "constants.hh"
 #include <algorithm>
 #include <cstdlib>
@@ -20,13 +15,13 @@ typedef struct {
 
 uint32_t screen[SCREEN_HEIGHT][SCREEN_WIDTH];
 uint32_t colors[4] = {
-  0xFFFFFFFF, // white
-  0xAAAAAAFF, // light gray
-  0x555555FF, // dark gray
-  0x000000FF, // black
+    0xFFFFFFFF, // white
+    0xAAAAAAFF, // light gray
+    0x555555FF, // dark gray
+    0x000000FF, // black
 };
 
-Gpu::Gpu(Memory& mem) : mmu(mem) {
+Gpu::Gpu(Memory &mem) : mmu(mem) {
   mode_clock = 0;
   memset(screen, colors[0], sizeof(screen));
   // mmu.set_ppu_mode(2);
@@ -44,39 +39,11 @@ Gpu::Gpu(Memory& mem) : mmu(mem) {
   wx = 0;
   x_pos = 0;
   win_line = 0;
+}
 
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) < 0) {
-    SDL_Log("Could not initialize SDL: %s\n", SDL_GetError());
-    exit(1);
-  }
-
-  window = SDL_CreateWindow("Operlaston's Gameboy Emulator", 
-                            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                            SCREEN_WIDTH * SCALE_FACTOR,
-                            SCREEN_HEIGHT * SCALE_FACTOR, 
-                            SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
-  if (window == NULL) {
-    SDL_Log("Could not create SDL window: %s\n", SDL_GetError());
-    exit(1);
-  }
-
-  renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-  if (renderer == NULL) {
-    SDL_Log("Could not create SDL renderer: %s\n", SDL_GetError());
-    exit(1);
-  }
-  SDL_RenderSetLogicalSize(renderer, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-  texture = SDL_CreateTexture(
-    renderer,
-    SDL_PIXELFORMAT_RGBA8888,
-    SDL_TEXTUREACCESS_STREAMING,
-    SCREEN_WIDTH, SCREEN_HEIGHT
-  );
-  if (texture == NULL) {
-    SDL_Log("Could not create SDL texture: %s\n", SDL_GetError());
-    exit(1);
-  }
+void Gpu::init_sdl(SDL_Renderer *r, SDL_Texture *t) {
+  this->renderer = r;
+  this->texture = t;
 }
 
 bool Gpu::get_lcdc_bit(LCD_CONTROL_BIT bit) {
@@ -123,7 +90,7 @@ void Gpu::draw_win_pixel(uint8_t palette) {
   // retrieve the tile address
   uint8_t win_x = x_pos - (wx - 7);
   uint16_t tile_addr = get_tile_addr(win_x, win_line, tile_map_base);
-  
+
   // draw the pixel
   draw_pixel(palette, win_x, win_line, tile_addr);
 }
@@ -131,45 +98,56 @@ void Gpu::draw_win_pixel(uint8_t palette) {
 uint16_t Gpu::get_tile_addr(uint8_t x, uint8_t y, uint16_t tile_map_base) {
   uint8_t tile_x = x >> 3; // int divide by 8 to get tile x,y
   uint8_t tile_y = y >> 3;
-  uint16_t tile_index_addr = tile_map_base + (tile_y << 5) + tile_x; // each row is 32 tiles
+  uint16_t tile_index_addr =
+      tile_map_base + (tile_y << 5) + tile_x; // each row is 32 tiles
   uint8_t tile_index = mmu.read_byte(tile_index_addr);
 
   // find the location of tile data using the tile index
-  uint16_t tile_addr = tile_data_base + (tile_index << 4); // each tile is 16 bytes
-  if (tile_data_base == 0x9000) 
+  uint16_t tile_addr =
+      tile_data_base + (tile_index << 4); // each tile is 16 bytes
+  if (tile_data_base == 0x9000)
     tile_addr = tile_data_base + (((int8_t)tile_index) << 4);
   return tile_addr;
 }
 
 void Gpu::draw_pixel(uint8_t palette, uint8_t x, uint8_t y,
                      uint16_t tile_addr) {
-  uint8_t byte1 = mmu.read_byte(tile_addr + ((y & 0x7) << 1)); // apply the y offset to get the correct line 
-  uint8_t byte2 = mmu.read_byte(tile_addr + ((y & 0x7) << 1) + 1); // each line in the tile is 2 bytes
-  
+  uint8_t byte1 = mmu.read_byte(
+      tile_addr +
+      ((y & 0x7) << 1)); // apply the y offset to get the correct line
+  uint8_t byte2 = mmu.read_byte(tile_addr + ((y & 0x7) << 1) +
+                                1); // each line in the tile is 2 bytes
+
   uint8_t bit = 7 - (x & 0x7);
   uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
-  uint8_t color = (palette >> (color_id << 1)) & 0x3; // extract the color from the palette
-  screen[curr_line][x_pos++] = colors[color]; 
+  uint8_t color =
+      (palette >> (color_id << 1)) & 0x3; // extract the color from the palette
+  screen[curr_line][x_pos++] = colors[color];
 }
 
-// sprite_x is the pixel to draw's x position relative to the tile (affected by x flip)
-// pos_x is the x position where the pixel will be drawn relative to the screen (unaffected by x flip)
-void Gpu::draw_sprite_pixel(uint8_t palette, uint8_t draw_x, uint8_t draw_y, 
+// sprite_x is the pixel to draw's x position relative to the tile (affected by
+// x flip) pos_x is the x position where the pixel will be drawn relative to the
+// screen (unaffected by x flip)
+void Gpu::draw_sprite_pixel(uint8_t palette, uint8_t draw_x, uint8_t draw_y,
                             uint8_t pos_x, uint8_t pos_y, uint16_t tile_addr) {
-  uint8_t byte1 = mmu.read_byte(tile_addr + ((draw_y & 7) << 1)); // apply the y offset to get the correct line 
-  uint8_t byte2 = mmu.read_byte(tile_addr + ((draw_y & 7) << 1) + 1); // each line in the tile is 2 bytes
-  
+  uint8_t byte1 = mmu.read_byte(
+      tile_addr +
+      ((draw_y & 7) << 1)); // apply the y offset to get the correct line
+  uint8_t byte2 = mmu.read_byte(tile_addr + ((draw_y & 7) << 1) +
+                                1); // each line in the tile is 2 bytes
+
   uint8_t bit = 7 - draw_x;
   uint8_t color_id = (((byte2 >> bit) & 1) << 1) | ((byte1 >> bit) & 1);
   if (color_id == 0) {
     return;
   }
-  uint8_t color = (palette >> (color_id << 1)) & 0x3; // extract the color from the palette
+  uint8_t color =
+      (palette >> (color_id << 1)) & 0x3; // extract the color from the palette
   screen[pos_y][pos_x] = colors[color];
 }
 
 void Gpu::draw_sprite(sprite_t sprite) {
-  
+
   bool y_flip = (sprite.flags >> 6) & 1;
   bool x_flip = (sprite.flags >> 5) & 1;
   bool obp1 = (sprite.flags >> 4) & 1;
@@ -177,27 +155,32 @@ void Gpu::draw_sprite(sprite_t sprite) {
   uint8_t palette = mmu.read_byte(0xFF48); // OBP0 register
   if (obp1)
     palette = mmu.read_byte(0xFF49); // OBP1 register
-  
+
   uint8_t draw_y = curr_line - sprite.y;
-  if (y_flip) draw_y = sprite_height - draw_y - 1;
+  if (y_flip)
+    draw_y = sprite_height - draw_y - 1;
 
   if (sprite_height == 16) {
     if (draw_y >= 8) {
       sprite.tile_index |= 1;
-    }
-    else {
+    } else {
       sprite.tile_index &= 0xFE;
     }
   }
-  uint16_t tile_addr = 0x8000 + (sprite.tile_index << 4); // each tile is 16 bytes
+  uint16_t tile_addr =
+      0x8000 + (sprite.tile_index << 4); // each tile is 16 bytes
 
   for (int i = 0; i < 8; i++) {
-    if (sprite.x + i >= SCREEN_WIDTH) break;
-    if (sprite.x + i < 0) continue;
+    if (sprite.x + i >= SCREEN_WIDTH)
+      break;
+    if (sprite.x + i < 0)
+      continue;
     uint8_t draw_x = i;
-    if (x_flip) draw_x = 7 - draw_x;
+    if (x_flip)
+      draw_x = 7 - draw_x;
     if (screen[curr_line][sprite.x + i] == colors[0] || bg_priority == 0) {
-      draw_sprite_pixel(palette, draw_x, draw_y, sprite.x + i, curr_line, tile_addr);
+      draw_sprite_pixel(palette, draw_x, draw_y, sprite.x + i, curr_line,
+                        tile_addr);
     }
   }
 }
@@ -212,26 +195,26 @@ void Gpu::draw_sprites() {
     int16_t ly_signed = curr_line & 0x00FF;
     if (ly_signed >= y && ly_signed < y + sprite_height) {
       sprite_t sprite = {
-        x,
-        y,
-        mmu.read_byte(addr + 2), // tile index
-        mmu.read_byte(addr + 3), // flags
+          x, y,
+          mmu.read_byte(addr + 2), // tile index
+          mmu.read_byte(addr + 3), // flags
       };
       sprites[num_sprites++] = sprite;
     }
   }
-  stable_sort(begin(sprites), begin(sprites) + num_sprites, [](const sprite_t& a, const sprite_t& b) {
-    return a.x < b.x;
-  });
+  stable_sort(begin(sprites), begin(sprites) + num_sprites,
+              [](const sprite_t &a, const sprite_t &b) { return a.x < b.x; });
   // if (curr_line >= 102) {
   //   printf("Line %d: ", curr_line);
   // }
   for (int i = num_sprites - 1; i >= 0; i--) {
     // if (curr_line >= 94 && sprites[i].tile_index == 98) {
-    //   printf("Line: %d x: %d y: %d tile: %d flags: %d\n", curr_line, sprites[i].x, sprites[i].y, sprites[i].tile_index, sprites[i].flags);
+    //   printf("Line: %d x: %d y: %d tile: %d flags: %d\n", curr_line,
+    //   sprites[i].x, sprites[i].y, sprites[i].tile_index, sprites[i].flags);
     // }
     // if (curr_line >= 102 && curr_line <= 113) {
-    //   printf("x: %d y: %d tile: %d flags: %d\n", sprites[i].x, sprites[i].y, sprites[i].tile_index, sprites[i].flags);
+    //   printf("x: %d y: %d tile: %d flags: %d\n", sprites[i].x, sprites[i].y,
+    //   sprites[i].tile_index, sprites[i].flags);
     // }
     draw_sprite(sprites[i]);
   }
@@ -259,7 +242,7 @@ void Gpu::draw_line() {
     // printf("drawing bg\n");
     // draw bg
     x_pos = 0;
-    while (x_pos < 160) { 
+    while (x_pos < 160) {
       draw_bg_pixel(palette);
     }
 
@@ -296,8 +279,7 @@ void Gpu::step(uint8_t cycles) {
       render();
     }
     return;
-  }
-  else if (!prev_lcd_enable){
+  } else if (!prev_lcd_enable) {
     mmu.check_lyc_ly();
     mmu.set_ppu_mode(2);
   }
@@ -305,94 +287,63 @@ void Gpu::step(uint8_t cycles) {
   mode_clock += cycles;
   // printf("step. ppu mode: %d\n", mmu.get_ppu_mode());
   switch (mmu.get_ppu_mode()) {
-    case 2: // OAM
-      if (mode_clock >= MODE_2_CYCLES) {
-        if (mmu.read_byte(LY) == wy) {
-          win_line_enable = true;
-        }
-        mmu.set_ppu_mode(3);
-        mode_clock -= MODE_2_CYCLES;
+  case 2: // OAM
+    if (mode_clock >= MODE_2_CYCLES) {
+      if (mmu.read_byte(LY) == wy) {
+        win_line_enable = true;
       }
-      break;
-    case 3: // DRAW
-      if (mode_clock >= MODE_3_CYCLES) {
-        mmu.set_ppu_mode(0);
-        draw_line();
-        mode_clock -= MODE_3_CYCLES;
-        if (get_stat_bit(MODE_0)) {
+      mmu.set_ppu_mode(3);
+      mode_clock -= MODE_2_CYCLES;
+    }
+    break;
+  case 3: // DRAW
+    if (mode_clock >= MODE_3_CYCLES) {
+      mmu.set_ppu_mode(0);
+      draw_line();
+      mode_clock -= MODE_3_CYCLES;
+      if (get_stat_bit(MODE_0)) {
+        mmu.request_interrupt(STAT_INTER);
+      }
+    }
+    break;
+  case 0: // HBLANK
+    if (mode_clock >= MODE_0_CYCLES) {
+      mmu.inc_scanline();
+      if (mmu.read_byte(LY) == SCREEN_HEIGHT) {
+        render();
+        mmu.request_interrupt(VBLANK_INTER);
+        mmu.set_ppu_mode(1);
+        if (get_stat_bit(MODE_1)) {
+          mmu.request_interrupt(STAT_INTER);
+        }
+      } else {
+        mmu.set_ppu_mode(2);
+        if (get_stat_bit(MODE_2)) {
           mmu.request_interrupt(STAT_INTER);
         }
       }
-      break;
-    case 0: // HBLANK
-      if (mode_clock >= MODE_0_CYCLES) {
-        mmu.inc_scanline();
-        if (mmu.read_byte(LY) == SCREEN_HEIGHT) {
-          render();
-          mmu.request_interrupt(VBLANK_INTER);
-          mmu.set_ppu_mode(1); 
-          if (get_stat_bit(MODE_1)) {
-            mmu.request_interrupt(STAT_INTER);
-          }
-        }
-        else {
-          mmu.set_ppu_mode(2);
-          if (get_stat_bit(MODE_2)) {
-            mmu.request_interrupt(STAT_INTER);
-          }
-        }
-        mode_clock -= MODE_0_CYCLES;
+      mode_clock -= MODE_0_CYCLES;
+    }
+    break;
+  case 1: // VBLANK
+    if (mode_clock >= MODE_1_CYCLES) {
+      mmu.inc_scanline();
+      win_line++;
+      if (mmu.read_byte(LY) > 153) {
+        mmu.reset_scanline();
+        win_line = 0;
+        win_line_enable = false;
+        mmu.set_ppu_mode(2);
       }
-      break;
-    case 1: // VBLANK
-      if (mode_clock >= MODE_1_CYCLES) {
-        mmu.inc_scanline();
-        win_line++;
-        if (mmu.read_byte(LY) > 153) {
-          mmu.reset_scanline();
-          win_line = 0;
-          win_line_enable = false;
-          mmu.set_ppu_mode(2);
-        }
-        mode_clock -= MODE_1_CYCLES;
-      }
-      break;
+      mode_clock -= MODE_1_CYCLES;
+    }
+    break;
   }
 }
 
-// void Gpu::set_draw_color(uint8_t color) {
-//   switch(color) {
-//     case 0:
-//       SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-//      break;
-//     case 1:
-//       SDL_SetRenderDrawColor(renderer, 170, 170, 170, 255);
-//      break;
-//     case 2:
-//       SDL_SetRenderDrawColor(renderer, 85, 85, 85, 255);
-//       break;
-//     case 3:
-//       SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-//       break;
-//   }
-// }
-
 void Gpu::render() {
-  // for (int y = 0; y < SCREEN_HEIGHT; y++) {
-  //   for (int x = 0; x < SCREEN_WIDTH; x++) {
-  //     SDL_Rect pixel = {
-  //       x * SCALE_FACTOR,
-  //       y * SCALE_FACTOR,
-  //       SCALE_FACTOR,
-  //       SCALE_FACTOR
-  //     };
-  //     set_draw_color(screen[y][x]);
-  //     SDL_RenderFillRect(renderer, &pixel);
-  //   }
-  // }
   SDL_UpdateTexture(texture, NULL, screen, SCREEN_WIDTH * sizeof(uint32_t));
   SDL_RenderClear(renderer);
   SDL_RenderCopy(renderer, texture, NULL, NULL);
   SDL_RenderPresent(renderer);
 }
-
