@@ -143,7 +143,7 @@ Memory::Memory(char *rom_file){
     std::string save_file = file_name + ".sav";
     int save_fd = open(save_file.c_str(), O_RDONLY);
     if (save_fd >= 0) {
-      int bytes_read = read(save_fd, ram_banks, sizeof(ram_banks));
+      int bytes_read = read(save_fd, ram_banks, ram_size);
       if (bytes_read < 0) {
         std::cout << "Couldn't read from save file." << std::endl;
         std::cout << "Starting boot anyway." << std::endl;
@@ -214,7 +214,7 @@ int Memory::save_ram() {
   }
   std::string save_file = file_name + ".sav";
   int save_fd = open(save_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  int bytes_written = write(save_fd, ram_banks, sizeof(ram_banks));
+  int bytes_written = write(save_fd, ram_banks, ram_size);
   while (bytes_written < 0) {
     if (errno == EINTR) {
       continue;
