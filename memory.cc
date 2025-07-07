@@ -3,8 +3,11 @@
 #include "timer.hh"
 #include "joypad.hh"
 #include "cpu.hh"
+#include <cerrno>
 #include <cstdio>
 #include <iostream>
+#include <fcntl.h>
+#include <unistd.h>
 
 static unsigned char mem[0x10000];
 static unsigned char cart[0x200000];
@@ -29,6 +32,7 @@ static unsigned char boot_rom[0x100] = {
 };
 
 Memory::Memory(char *rom_file){
+  file_name = rom_file;
 
   FILE *rom_fp = fopen(rom_file, "rb"); // open in read binary mode
   if (rom_fp == NULL) {
@@ -135,6 +139,19 @@ Memory::Memory(char *rom_file){
   }
 
   memset(ram_banks, 0, sizeof(ram_banks));
+  if (banking_type == MBC1_RAM_BATTERY || banking_type == MBC3_RAM_BATTERY) {
+    std::string save_file = file_name + ".sav";
+    int save_fd = open(save_file.c_str(), O_RDONLY);
+    if (save_fd >= 0) {
+      int bytes_read = read(save_fd, ram_banks, sizeof(ram_banks));
+      if (bytes_read < 0) {
+        std::cout << "Couldn't read from save file." << std::endl;
+        std::cout << "Starting boot anyway." << std::endl;
+      }
+      std::cout << bytes_read << " bytes were loaded into RAM." << std::endl;
+      close(save_fd);
+    }
+  }
   curr_rom_bank = 1; // rom bank at 0x4000-0x7fff (default is 1)
   curr_ram_bank = 0;
 
@@ -189,6 +206,25 @@ void Memory::set_joypad(Joypad *j) {
 
 void Memory::set_cpu(Cpu *cpu) {
   this->cpu = cpu;
+}
+
+int Memory::save_ram() {
+  if (banking_type != MBC1_RAM_BATTERY && banking_type != MBC3_RAM_BATTERY) {
+    return 0;
+  }
+  std::string save_file = file_name + ".sav";
+  int save_fd = open(save_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  int bytes_written = write(save_fd, ram_banks, sizeof(ram_banks));
+  while (bytes_written < 0) {
+    if (errno == EINTR) {
+      continue;
+    }
+    std::cout << "An error occurred. The game could not be saved." << std::endl;
+    return -1;
+  }
+  std::cout << bytes_written << " bytes of RAM were saved." << std::endl;
+  close(save_fd);
+  return 0;
 }
 
 uint8_t Memory::mbc1_read(uint16_t address) const {

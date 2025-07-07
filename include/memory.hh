@@ -2,6 +2,7 @@
 #define MEMORY_H
 
 #include <cstdint>
+#include <string>
 
 enum banking_types {
   MBC1,
@@ -27,6 +28,7 @@ class Cpu;
 
 class Memory {
 private:
+  std::string file_name;
   unsigned char num_rom_banks; // rom banks are 16KiB in size
   uint32_t ram_size;
   enum banking_types banking_type;
@@ -67,6 +69,7 @@ public:
   void set_timer(Timer *t);
   void set_joypad(Joypad *j);
   void set_cpu(Cpu *cpu);
+  int save_ram();
 
   uint8_t get_ppu_mode() const;
   void set_ppu_mode(uint8_t mode);

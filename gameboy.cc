@@ -64,6 +64,7 @@ void Gameboy::start() {
     joypad.handle_input();
     update();
   }
+  mmu.save_ram();
   shutdown_sdl();
 }
 
