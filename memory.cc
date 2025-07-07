@@ -148,7 +148,9 @@ Memory::Memory(char *rom_file){
         std::cout << "Couldn't read from save file." << std::endl;
         std::cout << "Starting boot anyway." << std::endl;
       }
-      std::cout << bytes_read << " bytes were loaded into RAM." << std::endl;
+      else {
+        std::cout << bytes_read << " bytes were loaded into RAM." << std::endl;
+      }
       close(save_fd);
     }
   }
@@ -214,16 +216,17 @@ int Memory::save_ram() {
   }
   std::string save_file = file_name + ".sav";
   int save_fd = open(save_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (save_fd < 0) {
+    std::cout << "Error: could not open save file for writing." << std::endl;
+    return -1;
+  }
   int bytes_written = write(save_fd, ram_banks, ram_size);
-  while (bytes_written < 0) {
-    if (errno == EINTR) {
-      continue;
-    }
+  close(save_fd);
+  if (bytes_written < 0) {
     std::cout << "An error occurred. The game could not be saved." << std::endl;
     return -1;
   }
   std::cout << bytes_written << " bytes of RAM were saved." << std::endl;
-  close(save_fd);
   return 0;
 }
 
