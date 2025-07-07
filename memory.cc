@@ -144,14 +144,11 @@ Memory::Memory(char *rom_file){
     int save_fd = open(save_file.c_str(), O_RDONLY);
     if (save_fd >= 0) {
       int bytes_read = read(save_fd, ram_banks, ram_size);
-      if (bytes_read < 0) {
+      close(save_fd);
+      if ((uint32_t)bytes_read != ram_size) {
         std::cout << "Couldn't read from save file." << std::endl;
         std::cout << "Starting boot anyway." << std::endl;
       }
-      else {
-        std::cout << bytes_read << " bytes were loaded into RAM." << std::endl;
-      }
-      close(save_fd);
     }
   }
   curr_rom_bank = 1; // rom bank at 0x4000-0x7fff (default is 1)
@@ -222,11 +219,10 @@ int Memory::save_ram() {
   }
   int bytes_written = write(save_fd, ram_banks, ram_size);
   close(save_fd);
-  if (bytes_written < 0) {
+  if ((uint32_t)bytes_written != ram_size) {
     std::cout << "An error occurred. The game could not be saved." << std::endl;
     return -1;
   }
-  std::cout << bytes_written << " bytes of RAM were saved." << std::endl;
   return 0;
 }
 

@@ -106,9 +106,13 @@ void Gameboy::update() {
   const double time_spent =
       (double)((end_time - start_time) * 1000) /
       SDL_GetPerformanceFrequency(); // time spent in milliseconds
-  double delay = 16.7427 - time_spent;
+  // double delay = 16.7427 - time_spent;
+  // if (delay > 1.0) {
+  //   SDL_Delay((Uint32)delay);
+  // }
+  // double speed
+  double delay = 8.37135 - time_spent;
   if (delay > 1.0) {
-    SDL_Delay((Uint32)delay);
+    SDL_Delay((Uint32) delay);
   }
-  // SDL_Delay(100);
 }
