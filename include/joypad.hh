@@ -3,6 +3,7 @@
 
 #include "stdint.h"
 #include "memory.hh"
+#include "constants.hh"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keycode.h>
@@ -30,6 +31,7 @@ class Joypad {
   void key_released(uint8_t key);
 public:
   bool quit;
+  double speed;
   Joypad(Memory &m);
   void set_joypad_state(uint8_t joypad_state);
   uint8_t get_joypad_state();

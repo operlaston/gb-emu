@@ -7,6 +7,7 @@ Joypad::Joypad(Memory &m) : mmu(m) {
   key_state = 0xFF;
   joypad = 0xFF;
   quit = false;
+  speed = NORMAL_SPEED;
 }
 
 void Joypad::key_pressed(uint8_t key) {
@@ -48,9 +49,11 @@ void Joypad::handle_input() {
 
     else if (event.type == SDL_KEYDOWN) {
       switch (event.key.keysym.sym) {
-      // case SDLK_ESCAPE:
-      //   quit = true;
-      //   break;
+      case SDLK_c:
+          if (speed == NORMAL_SPEED) speed = DOUBLE_SPEED;
+          else if (speed == DOUBLE_SPEED) speed = QUADRUPLE_SPEED;
+          else speed = NORMAL_SPEED;
+          break;
       case SDLK_UP:
         key_pressed(KEY_UP);
         break;

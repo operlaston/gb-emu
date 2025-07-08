@@ -49,4 +49,9 @@
 #define UNUSABLE_START (0xFEA0)
 #define UNUSABLE_END (0xFEFF)
 
+// speeds
+#define NORMAL_SPEED (16.7427)
+#define DOUBLE_SPEED (8.37135)
+#define QUADRUPLE_SPEED (4.185675)
+
 #endif

@@ -33,7 +33,7 @@ void Gameboy::init_sdl() {
 
   // init SDL renderer
   renderer = SDL_CreateRenderer(
-      window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+      window, -1, SDL_RENDERER_ACCELERATED /*| SDL_RENDERER_PRESENTVSYNC*/);
   if (renderer == NULL) {
     std::cerr << "Could not create SDL renderer: " << SDL_GetError()
               << std::endl;
@@ -106,12 +106,18 @@ void Gameboy::update() {
   const double time_spent =
       (double)((end_time - start_time) * 1000) /
       SDL_GetPerformanceFrequency(); // time spent in milliseconds
+
+  // 1x (normal) speed
   // double delay = 16.7427 - time_spent;
-  // if (delay > 1.0) {
-  //   SDL_Delay((Uint32)delay);
-  // }
-  // double speed
-  double delay = 8.37135 - time_spent;
+
+  // 2x (double) speed
+  // double delay = 8.37135 - time_spent;
+
+  // 4x (quadruple) speed
+  // double delay = 4.185675 - time_spent;
+
+  double delay = joypad.speed - time_spent;
+
   if (delay > 1.0) {
     SDL_Delay((Uint32) delay);
   }
