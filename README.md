@@ -8,21 +8,21 @@ SDL2, GNU make
 Run ```make``` from the project root directory.
 
 ## Run
-Usage: ```./gameboy [path/to/rom]```
+Usage: ```./gameboy [path/to/rom]```<br>
 Example: ```./gameboy ~/Downloads/pokemon-blue.gb```
 
 ## Keybinds
 
 ### Main
-A: ```X``` 
-B: ```Z```
-Start: ```Enter```
-Select: ```Tab```
-Up: ```↑```
-Down: ```↓``` 
-Left: ```←```
+A: ```X```<br>
+B: ```Z```<br>
+Start: ```Enter```<br>
+Select: ```Tab```<br>
+Up: ```↑```<br>
+Down: ```↓```<br>
+Left: ```←```<br>
 Right: ```→```
 
 ### Special
-Cycle Speed: ```C```
+Cycle Speed: ```C```<br>
 *Note: Cycle Speed will double the speed of the emulator until reaching 4x speed. If ```C``` is pressed while the emulator is at 4x speed, the emulator will return to normal speed (59.7275hz)*
