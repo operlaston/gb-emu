@@ -1,9 +1,9 @@
-#include <stdio.h>
 #include "gameboy.hh"
+#include <stdio.h>
 
 int main(int argc, char *argv[]) {
   if (argc != 2) {
-    printf("Usage: gameboy [path/to/rom]");
+    printf("Usage: gameboy [path/to/rom]\n");
     exit(1);
   }
 
