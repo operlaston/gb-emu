@@ -62,8 +62,8 @@ private:
 
   Memory& mmu;
   
-  std::function<void()> opcode_table[256];
-  std::function<void()> prefix_table[256];
+  std::array<std::function<void()>, 256> opcode_table{};
+  std::array<std::function<void()>, 256> prefix_table{};
 
   // first letter is high and second is low (little endian)
   // e.g. for AF, the higher half is A and the lower half is F

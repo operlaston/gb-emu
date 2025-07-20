@@ -2,9 +2,6 @@
 #include <cstring>
 
 void Cpu::init_opcode_table() {
-  // ensure opcodes without an instruction are set to 0
-  memset(opcode_table, 0, sizeof(opcode_table));
-
   // miscellaneous instructions
   opcode_table[0x0] = [this](){ nop(); };
   opcode_table[0x10] = [this](){ stop(); };
@@ -288,9 +285,6 @@ void Cpu::init_opcode_table() {
 }
 
 void Cpu::init_prefix_table() {
-  // ensure opcodes without an instruction are set to 0
-  memset(prefix_table, 0, sizeof(prefix_table));
-
   // prefixed instructions
   prefix_table[0x0] = [this](){ rlc_r8(REG_B); };
   prefix_table[0x1] = [this](){ rlc_r8(REG_C); };
