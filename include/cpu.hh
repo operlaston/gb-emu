@@ -1,7 +1,6 @@
 #ifndef CPU_H
 #define CPU_H
 #include <cstdint>
-#include <functional>
 #include "memory.hh"
 
 // flags (F register)
@@ -61,9 +60,6 @@ class Cpu {
 private:
 
   Memory& mmu;
-  
-  std::function<void()> opcode_table[256];
-  std::function<void()> prefix_table[256];
 
   // first letter is high and second is low (little endian)
   // e.g. for AF, the higher half is A and the lower half is F
@@ -82,9 +78,6 @@ private:
   bool is_prefix; // set by prefix instruction opcode 0xCB
   uint8_t instr_cycles; // m-cycles of the last executed instruction
   bool halt_bug;
-  
-  void init_opcode_table();
-  void init_prefix_table();
 
   unsigned char *find_r8(REGISTER);
   unsigned short *find_r16(REGISTER);

@@ -83,8 +83,9 @@ void Gameboy::update() {
     // perform a cycle
     // uint8_t cycles = interrupt_cycles;
     uint8_t cycles = interrupt_cycles;
-    if (cpu.state == RUNNING || cpu.state == BOOTING)
+    if (cpu.state == RUNNING || cpu.state == BOOTING) {
       cycles = cpu.fetch_and_execute();
+    }
     else if (cpu.state == HALTED)
       cycles = 4; // 1 m-cycle
     cycles_this_update += cycles;
