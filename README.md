@@ -2,7 +2,7 @@
 Gameboy Emulator written in C++ which supports MBC1 and MBC3.
 
 ## Dependencies
-SDL2, GNU make
+SDL2, GNU make, gcc
 
 ## Build
 Run ```make``` from the project root directory.
